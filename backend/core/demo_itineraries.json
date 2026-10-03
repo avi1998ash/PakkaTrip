@@ -1,0 +1,279 @@
+{
+ "PK201": {
+  "pickup": "Majnu ka Tilla, Delhi · 7:30 PM",
+  "itinerary": [
+   [
+    "Delhi → Manali (overnight Volvo)",
+    "Board the AC Volvo at Majnu ka Tilla at 7:30 PM. Overnight journey via Chandigarh and Mandi with a dinner halt at Murthal."
+   ],
+   [
+    "Solang Valley & Old Manali",
+    "Reach Manali by 9 AM and check in. Afternoon at Solang Valley (paragliding and ropeway at own cost). Evening walk through Old Manali's cafés."
+   ],
+   [
+    "Hadimba Temple → Delhi",
+    "Visit Hadimba Devi Temple, Vashisht hot springs and Mall Road. Board the return Volvo at 5 PM; reach Delhi early next morning."
+   ]
+  ]
+ },
+ "PK202": {
+  "pickup": "Kashmere Gate ISBT, Delhi · 5:30 AM",
+  "itinerary": [
+   [
+    "Delhi → Shivpuri riverside camp",
+    "Leave Delhi at 5:30 AM and reach the Shivpuri camp by noon. Lunch, beach volleyball, then a bonfire with music and dinner by the Ganga."
+   ],
+   [
+    "16 km rafting & Ganga Aarti → Delhi",
+    "Breakfast, then 16 km of white-water rafting from Shivpuri to Rishikesh. Laxman Jhula, Triveni Ghat evening aarti, and back in Delhi by 11 PM."
+   ]
+  ]
+ },
+ "PK203": {
+  "pickup": "Majnu ka Tilla, Delhi · 6:30 PM",
+  "itinerary": [
+   [
+    "Delhi → Bhuntar (overnight Volvo)",
+    "Board at 6:30 PM for the overnight drive into the Parvati Valley."
+   ],
+   [
+    "Kasol → Kheerganga trek",
+    "Taxi to Barshaini and a 12 km trek through pine forest to Kheerganga. Soak in the hot spring and camp under the stars."
+   ],
+   [
+    "Descent, Manikaran → Delhi",
+    "Trek down after breakfast, stop at Manikaran Sahib, and board the evening Volvo to Delhi."
+   ]
+  ]
+ },
+ "PK204": {
+  "pickup": "Dhaula Kuan, Delhi · 6:00 PM",
+  "itinerary": [
+   [
+    "Delhi → Udaipur (overnight sleeper)",
+    "Board the AC sleeper at 6 PM for the overnight run to the City of Lakes."
+   ],
+   [
+    "City Palace & Lake Pichola",
+    "Check in to the haveli, explore City Palace, take a sunset boat ride on Lake Pichola and watch the Bagore ki Haveli folk dance show."
+   ],
+   [
+    "Saheliyon ki Bari → Delhi",
+    "Morning at Saheliyon ki Bari and Fateh Sagar Lake, shopping at Hathi Pol, and the evening bus back to Delhi."
+   ]
+  ]
+ },
+ "PK205": {
+  "pickup": "Kashmere Gate ISBT, Delhi · 5:00 AM",
+  "itinerary": [
+   [
+    "Delhi → Shimla",
+    "Early departure, breakfast stop at Murthal, reach Shimla by afternoon. Walk the Ridge, Christ Church and Mall Road."
+   ],
+   [
+    "Kufri & Green Valley → Delhi",
+    "Morning excursion to Kufri and Green Valley viewpoints, then head back to Delhi by night."
+   ]
+  ]
+ },
+ "PK206": {
+  "pickup": "Charbagh, Lucknow · 5:00 AM",
+  "itinerary": [
+   [
+    "Lucknow → Varanasi",
+    "Reach Varanasi by noon, darshan at Kashi Vishwanath, and the grand Ganga Aarti at Dashashwamedh Ghat."
+   ],
+   [
+    "Sunrise boat ride & Sarnath → Lucknow",
+    "Dawn boat ride along the ghats, breakfast, a visit to Sarnath, and back to Lucknow by evening."
+   ]
+  ]
+ },
+ "PK207": {
+  "pickup": "Anand Vihar, Delhi · 6:00 AM",
+  "itinerary": [
+   [
+    "Delhi → Corbett resort",
+    "Reach the resort by lunch. Pool time, an evening nature walk along the Kosi river, and a bonfire dinner."
+   ],
+   [
+    "Jeep safari → Delhi",
+    "Early morning jeep safari in the Jhirna zone, breakfast, a stop at Corbett Falls, and back to Delhi by night."
+   ]
+  ]
+ },
+ "PK208": {
+  "pickup": "Dadar East, Mumbai · 7:00 PM",
+  "itinerary": [
+   [
+    "Mumbai → Goa (overnight sleeper)",
+    "Board at Dadar at 7 PM for the coastal overnight drive."
+   ],
+   [
+    "North Goa beaches",
+    "Check in, then Baga, Calangute and Fort Aguada. Evening free for the shacks."
+   ],
+   [
+    "Old Goa & river cruise",
+    "Basilica of Bom Jesus, Se Cathedral, Panjim's Latin Quarter and a sunset Mandovi river cruise."
+   ],
+   [
+    "Anjuna → Mumbai",
+    "Anjuna flea market and Vagator cliffs, then the evening bus back to Mumbai."
+   ]
+  ]
+ },
+ "PK209": {
+  "pickup": "Kashmere Gate ISBT, Delhi · 5:30 AM",
+  "itinerary": [
+   [
+    "Delhi → Mussoorie",
+    "Drive via Dehradun, stop at Kempty Falls, and spend the evening on Mall Road."
+   ],
+   [
+    "Gun Hill & Company Garden → Delhi",
+    "Gun Hill ropeway, Company Garden, a café breakfast, and back to Delhi by night."
+   ]
+  ]
+ },
+ "PK210": {
+  "pickup": "Kashmere Gate ISBT, Delhi · 4:00 AM",
+  "itinerary": [
+   [
+    "Delhi → Guptkashi",
+    "Long scenic drive via Rishikesh and Rudraprayag."
+   ],
+   [
+    "Gaurikund → Kedarnath",
+    "16 km trek (pony or palki at own cost) to Kedarnath; evening aarti at the temple."
+   ],
+   [
+    "Darshan & descent",
+    "Early morning darshan, then trek back down to Gaurikund and drive to Guptkashi."
+   ],
+   [
+    "Guptkashi → Delhi",
+    "Drive back to Delhi, reaching by late night."
+   ]
+  ]
+ },
+ "PK211": {
+  "pickup": "Majnu ka Tilla, Delhi · 8:00 PM",
+  "itinerary": [
+   [
+    "Delhi → Shimla (overnight)",
+    "Overnight Volvo to Shimla."
+   ],
+   [
+    "Shimla → Sangla",
+    "A dramatic drive along the Sutlej to the Sangla valley."
+   ],
+   [
+    "Chitkul — the last village",
+    "Day trip to Chitkul near the Tibet border, then Kamru Fort."
+   ],
+   [
+    "Sangla → Delhi",
+    "Drive back to Shimla and board the overnight Volvo to Delhi."
+   ]
+  ]
+ },
+ "PK212": {
+  "pickup": "Dhaula Kuan, Delhi · 6:00 AM",
+  "itinerary": [
+   [
+    "Delhi → Jaipur",
+    "Reach by noon. Amber Fort, Panna Meena ka Kund, and a Rajasthani dinner at Chokhi Dhani."
+   ],
+   [
+    "Hawa Mahal & City Palace → Delhi",
+    "Hawa Mahal, City Palace, Jantar Mantar and shopping at Johari Bazaar, then back to Delhi."
+   ]
+  ]
+ },
+ "PK213": {
+  "pickup": "Majnu ka Tilla, Delhi · 8:00 PM",
+  "itinerary": [
+   [
+    "Delhi → Dharamshala (overnight Volvo)",
+    "Board at 8 PM; reach McLeodganj by morning."
+   ],
+   [
+    "McLeodganj & Bhagsu",
+    "Dalai Lama Temple, Bhagsu waterfall and Tibetan cafés."
+   ],
+   [
+    "Dharamshala → Delhi",
+    "HPCA cricket stadium, Norbulingka Institute, and the evening Volvo back."
+   ]
+  ]
+ },
+ "PK214": {
+  "pickup": "Majnu ka Tilla, Delhi · 6:00 PM",
+  "itinerary": [
+   [
+    "Delhi → Manali (overnight Volvo)",
+    "Board at 6 PM; reach Manali by morning."
+   ],
+   [
+    "Atal Tunnel & Sissu",
+    "Drive through the Atal Tunnel to the Sissu snow point (cab at own cost); Club House in the evening."
+   ],
+   [
+    "Manali local → Delhi",
+    "Hadimba Temple, Tibetan monastery, Mall Road, and the evening Volvo back."
+   ]
+  ]
+ },
+ "PK215": {
+  "pickup": "Majnu ka Tilla, Delhi · 6:00 PM",
+  "itinerary": [
+   [
+    "Delhi → Manali (overnight)",
+    "Overnight Volvo to Manali."
+   ],
+   [
+    "Solang & Atal Tunnel",
+    "Solang Valley and the Atal Tunnel north portal."
+   ],
+   [
+    "Manali → Kasol",
+    "Drive to the Parvati Valley, visit Manikaran Sahib, and spend the evening by the river in Kasol."
+   ],
+   [
+    "Kasol → Delhi",
+    "Chalal village walk, then the evening Volvo to Delhi."
+   ]
+  ]
+ },
+ "PK216": {
+  "pickup": "Dhaula Kuan, Delhi · 6:00 AM",
+  "itinerary": [
+   [
+    "Delhi → Pushkar camp",
+    "Reach Pushkar, camel safari and a folk night."
+   ],
+   [
+    "Brahma Temple → Delhi",
+    "Brahma Temple and the lake ghats, then back to Delhi."
+   ]
+  ]
+ },
+ "PK217": {
+  "pickup": "Dadar East, Mumbai · 7:00 PM",
+  "itinerary": [
+   [
+    "Mumbai → Goa (overnight sleeper)",
+    "Board at 7 PM for South Goa."
+   ],
+   [
+    "Dudhsagar jeep safari",
+    "Jeep safari to Dudhsagar Falls and lunch at a spice plantation."
+   ],
+   [
+    "Palolem & Colva → Mumbai",
+    "Palolem beach and Colva sunset, then the night bus back."
+   ]
+  ]
+ }
+}
