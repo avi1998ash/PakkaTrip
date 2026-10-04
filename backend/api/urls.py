@@ -4,7 +4,9 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from . import admin_views as a
 from . import auth_views as auth
 from . import operator_views as o
+from . import payout_views as pay
 from . import public_views as pub
+from . import webhooks as hooks
 
 urlpatterns = [
     # auth
@@ -26,6 +28,9 @@ urlpatterns = [
     path("admin/bookings/<str:code>/cancel/", a.booking_cancel),
     path("admin/settings/", a.platform_settings),
     path("admin/reset-demo/", a.reset_demo),
+    path("admin/payouts/", pay.payouts),
+    path("admin/payouts/<int:pk>/refresh/", pay.payout_refresh),
+    path("admin/bank-accounts/<int:operator_id>/<str:action>/", pay.bank_account_action),
 
     # operator
     path("operator/dashboard/", o.dashboard),
@@ -43,6 +48,8 @@ urlpatterns = [
     path("operator/earnings/", o.earnings),
     path("operator/reviews/", o.reviews),
     path("operator/reviews/<int:pk>/reply/", o.review_reply),
+    path("operator/bank-account/", pay.bank_account),
+    path("operator/ifsc/<str:code>/", pay.ifsc),
 
     # public (traveller site)
     path("public/auth/signup/", pub.signup),
@@ -58,4 +65,9 @@ urlpatterns = [
     path("public/bookings/<str:code>/", pub.booking_detail),
     path("public/bookings/<str:code>/cancel/", pub.booking_cancel),
     path("public/bookings/<str:code>/review/", pub.booking_review),
+    path("public/bookings/<str:code>/pay/verify/", pub.payment_verify),
+    path("public/bookings/<str:code>/pay/abandon/", pub.payment_abandon),
+
+    # payment gateway (server-to-server)
+    path("payments/razorpay/webhook/", hooks.razorpay_webhook),
 ]

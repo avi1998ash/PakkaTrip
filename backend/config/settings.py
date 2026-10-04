@@ -78,6 +78,17 @@ USE_TZ = True
 STATIC_URL = "static/"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"          # uploaded package photos
+
+# Razorpay (test keys start with rzp_test_). The webhook secret is the one you set on the Razorpay dashboard.
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
+PAYMENT_HOLD_MINUTES = int(os.environ.get("PAYMENT_HOLD_MINUTES", "15"))   # seats held while the traveller pays
+# RazorpayX (operator payouts): the RazorpayX account number money is paid out from (Dashboard → My Account).
+RAZORPAYX_ACCOUNT_NUMBER = os.environ.get("RAZORPAYX_ACCOUNT_NUMBER", "")
+RAZORPAYX_PAYOUT_MODE = os.environ.get("RAZORPAYX_PAYOUT_MODE", "IMPS")   # IMPS (instant, up to ₹5 lakh) or NEFT
+# Key for encrypting operator bank account numbers and PAN at rest (Fernet key; see core/crypto.py).
+FIELD_ENCRYPTION_KEY = os.environ.get("FIELD_ENCRYPTION_KEY", "")
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024   # up to 8 photos × 5 MB in one form
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

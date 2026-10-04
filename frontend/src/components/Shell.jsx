@@ -6,10 +6,10 @@ import { useFeedback } from './feedback'
 import { Brand, Icon } from './ui'
 
 export const NAV = {
-  admin: [['dashboard', 'Dashboard', 'grid'], ['operators', 'Operators', 'users'], ['packages', 'Packages', 'box'], ['bookings', 'Bookings', 'ticket'], ['settings', 'Settings', 'cog']],
-  operator: [['dashboard', 'My Dashboard', 'grid'], ['packages', 'My Packages', 'box'], ['inventory', 'Seat Inventory', 'seat'], ['bookings', 'My Bookings', 'ticket'], ['earnings', 'My Earnings', 'wallet'], ['reviews', 'Reviews', 'star']],
+  admin: [['dashboard', 'Dashboard', 'grid'], ['operators', 'Operators', 'users'], ['packages', 'Packages', 'box'], ['bookings', 'Bookings', 'ticket'], ['payouts', 'Payouts', 'bank'], ['settings', 'Settings', 'cog']],
+  operator: [['dashboard', 'My Dashboard', 'grid'], ['packages', 'My Packages', 'box'], ['inventory', 'Seat Inventory', 'seat'], ['bookings', 'My Bookings', 'ticket'], ['earnings', 'My Earnings', 'wallet'], ['bank', 'Bank & Payouts', 'bank'], ['reviews', 'Reviews', 'star']],
 }
-const COUNT_KEY = { operator: { bookings: 'op-bookings', reviews: 'reviews' }, admin: { operators: 'operators', packages: 'packages', bookings: 'bookings' } }
+const COUNT_KEY = { operator: { bookings: 'op-bookings', reviews: 'reviews' }, admin: { operators: 'operators', packages: 'packages', bookings: 'bookings', payouts: 'payouts' } }
 
 /** Route guard: no session → login; wrong role → back to the user's own pages. */
 export function RequireRole({ role, children }) {

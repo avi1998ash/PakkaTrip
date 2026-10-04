@@ -3,10 +3,10 @@
 Browsing needs no login. Bookings can be made as a guest or a signed-in traveller; a guest opens
 their own ticket with the booking's secret key (returned once at checkout, or via "find booking").
 """
-import re
 import secrets
 from collections import defaultdict
 
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.db.models import Count, Q, Sum
 from django.shortcuts import get_object_or_404
@@ -21,15 +21,19 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import User
 from bookings.models import Booking
-from bookings.services import SeatError, cancel_booking, create_online_booking, customer_refund_quote, price_quote, seat_stats
+from bookings.services import (LatePaymentError, SeatError, abandon_payment, cancel_booking, create_online_booking,
+                               customer_refund_quote, hold_expires_at, price_quote, release_expired_holds, seat_stats,
+                               settle_online_payment)
 from catalog.media import facilities_out, images_out
 from catalog.models import Package
 from core.models import CancellationRule, PlatformSetting
 from inventory.models import Departure
 from operators.models import Operator
+from payments import razorpay
+from payments.models import Payment
 from reviews.models import Review, refresh_ratings
 
-from .serializers import validate_phone
+from .serializers import UNPAID, validate_phone
 
 PUBLIC = [AllowAny]
 DEFAULT_EXCLUSIONS = ["Personal expenses and tips", "Entry tickets and adventure activities not listed",
@@ -103,7 +107,7 @@ def best_departures(pkgs, from_date, pax):
 
 
 def popularity_map(pkgs):
-    rows = Booking.objects.filter(package__in=pkgs).exclude(status__in=["cancelled", "expired"]).values("package").annotate(n=Count("id"))
+    rows = Booking.objects.filter(package__in=pkgs).exclude(status__in=["cancelled", *UNPAID]).values("package").annotate(n=Count("id"))
     return {r["package"]: r["n"] for r in rows}
 
 
@@ -188,7 +192,7 @@ def home(request):
         "routes": route_list, "testimonials": testimonials,
         "stats": {
             "trips_run": sum(o.trips_run_offline for o in verified),
-            "travellers": Booking.objects.exclude(status__in=["cancelled", "expired"]).aggregate(s=Sum("seats"))["s"] or 0,
+            "travellers": Booking.objects.exclude(status__in=["cancelled", *UNPAID]).aggregate(s=Sum("seats"))["s"] or 0,
             "avg_rating": round(agg["s"] / agg["n"], 1) if agg["n"] else None,
             "verified_operators": verified.count(),
         },
@@ -220,6 +224,7 @@ def search(request):
 @api_view(["GET"])
 @permission_classes(PUBLIC)
 def package_detail(request, pk):
+    release_expired_holds()
     p = get_object_or_404(live_packages().prefetch_related("itinerary"), pk=pk)
     today = timezone.localdate()
     deps = p.departures.filter(departure_date__gt=today).order_by("departure_date")[:12]
@@ -258,6 +263,7 @@ def config(request):
     s = PlatformSetting.get_all()
     pkgs = live_packages().values_list("from_city__name", "to_city__name")
     return Response({"fee_rate": s["fee_rate_pct"], "fee_min": s["fee_min_inr"], "policy": policy_out(),
+                     "payments_test_mode": settings.RAZORPAY_KEY_ID.startswith("rzp_test_"),
                      "cities": {"from": sorted({f for f, _ in pkgs}), "to": sorted({t for _, t in pkgs})}})
 
 
@@ -276,6 +282,7 @@ def _seats(value):
 @api_view(["POST"])
 @permission_classes(PUBLIC)
 def quote(request):
+    release_expired_holds()
     try:
         dep = get_object_or_404(Departure.objects.select_related("package"), pk=request.data.get("departure_id"),
                                 package__status=Package.Status.APPROVED)
@@ -293,33 +300,77 @@ class BookingIn(serializers.Serializer):
     phone = serializers.CharField(validators=[validate_phone])
     email = serializers.EmailField()
     co_travellers = serializers.ListField(child=serializers.CharField(max_length=100, allow_blank=True), required=False, default=list)
-    payment_method = serializers.ChoiceField(choices=["upi", "card", "netbanking"])
-    payment_detail = serializers.CharField(max_length=60, required=False, allow_blank=True, default="")
-
-    def validate_payment_detail(self, v):
-        # Never accept anything that looks like a full card number.
-        if re.search(r"\d{8,}", v.replace(" ", "")):
-            raise serializers.ValidationError("Send only the last 4 digits of a card.")
-        return v
 
 
 @api_view(["POST"])
 @permission_classes(PUBLIC)
 def create_booking(request):
+    """Hold the seats and open a Razorpay order. The booking is confirmed by /pay/verify/ (or the webhook)."""
+    if not razorpay.enabled():
+        return err("Online payments aren't set up yet. Please try again later.", 503)
     ser = BookingIn(data=request.data)
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
     co = [c.strip() for c in d["co_travellers"] if c.strip()][: d["seats"] - 1]
+    release_expired_holds(d["departure_id"])
     try:
         b = create_online_booking(departure_id=d["departure_id"], seats=d["seats"], lead_name=d["name"].strip(), lead_phone=d["phone"],
-                                  lead_email=d["email"].lower(), co_travellers=co, payment_method=d["payment_method"],
-                                  payment_detail=d["payment_detail"],
+                                  lead_email=d["email"].lower(), co_travellers=co,
                                   user=request.user if getattr(request.user, "role", None) == User.Role.TRAVELLER else None)
     except Departure.DoesNotExist:
         return err("This departure no longer exists.", 404)
     except SeatError as e:
         return err(str(e))
-    return Response(ticket_out(_booking(b.booking_code), key=True), status=201)
+    try:
+        order = razorpay.create_order(b.total_amount, receipt=b.booking_code, notes={"booking": b.booking_code})
+    except razorpay.GatewayError as e:
+        abandon_payment(b.pk, reason="Payment order could not be created")
+        return err(f"{e} No money was charged.", 502)
+    Payment.objects.create(booking=b, gateway="razorpay", gateway_order_id=order["id"], amount=b.total_amount)
+    return Response({
+        "code": b.booking_code, "key": b.guest_token, "total": b.total_amount, "hold_expires_at": hold_expires_at(b),
+        "razorpay": {
+            "key": settings.RAZORPAY_KEY_ID, "order_id": order["id"], "amount": order["amount"], "currency": order["currency"],
+            "name": "PakkaTrip", "description": f"{b.package.title} · {b.departure.departure_date:%d %b %Y} · {b.seats} seat(s)",
+            "prefill": {"name": b.lead_name, "email": b.lead_email, "contact": b.lead_phone},
+            "notes": {"booking": b.booking_code},
+        },
+    }, status=201)
+
+
+@api_view(["POST"])
+@permission_classes(PUBLIC)
+def payment_verify(request, code):
+    """Razorpay checkout's success callback: check the signature, then confirm the booking."""
+    b = owned_booking(request, code, unpaid=True)
+    if not b:
+        return err("Booking not found.", 404)
+    order_id = str(request.data.get("razorpay_order_id", ""))
+    payment_id = str(request.data.get("razorpay_payment_id", ""))
+    if not razorpay.verify_checkout_signature(order_id, payment_id, request.data.get("razorpay_signature")) \
+            or not b.payments.filter(gateway_order_id=order_id).exists():
+        return err("We couldn't verify this payment. If money was deducted, it will be refunded automatically.")
+    try:
+        settle_online_payment(b.pk, order_id=order_id, payment_id=payment_id)
+    except LatePaymentError as e:
+        return err(str(e), 409)
+    except SeatError as e:
+        return err(str(e))
+    except razorpay.GatewayError:
+        return err("Payment received, but we couldn't reach the gateway to confirm it. Your booking will update in a few "
+                   "minutes — check My Bookings.", 502)
+    return Response(ticket_out(_booking(b.booking_code), key=True))
+
+
+@api_view(["POST"])
+@permission_classes(PUBLIC)
+def payment_abandon(request, code):
+    """Traveller closed checkout without paying: put the held seats back on sale."""
+    b = owned_booking(request, code, unpaid=True)
+    if not b:
+        return err("Booking not found.", 404)
+    abandon_payment(b.pk)
+    return Response({"ok": True})
 
 
 def _booking(code):
@@ -327,11 +378,16 @@ def _booking(code):
             .prefetch_related("travellers", "payments", "refunds").get(booking_code=code))
 
 
-def owned_booking(request, code):
-    """The booking if the requester owns it (signed-in owner, or guest with the secret key), else None."""
+def owned_booking(request, code, unpaid=False):
+    """The booking if the requester owns it (signed-in owner, or guest with the secret key), else None.
+
+    Checkouts that were never paid (pending_payment / expired) only count when `unpaid` is set.
+    """
     try:
         b = _booking(str(code).upper())
     except Booking.DoesNotExist:
+        return None
+    if not unpaid and b.status in UNPAID:
         return None
     user = request.user
     if user.is_authenticated and b.user_id == user.id:
@@ -344,7 +400,7 @@ def owned_booking(request, code):
 
 def ticket_out(b, key=False):
     today = timezone.localdate()
-    pay = next(iter(b.payments.all()), None)
+    pay = next((x for x in b.payments.all() if x.paid_at), None)
     cancellable = b.status in (Booking.Status.CONFIRMED, Booking.Status.PENDING_CONFIRMATION) and b.departure.departure_date > today
     trip_over = b.status == Booking.Status.COMPLETED or (b.status == Booking.Status.CONFIRMED and b.departure.departure_date < today)
     out = {
@@ -420,7 +476,7 @@ def booking_find(request):
     """Guest lost the link: booking ID + the mobile number used → the ticket key."""
     code = str(request.data.get("code", "")).strip().upper()
     phone = str(request.data.get("phone", "")).strip()
-    b = Booking.objects.filter(booking_code=code, lead_phone=phone, source=Booking.Source.ONLINE).first()
+    b = Booking.objects.filter(booking_code=code, lead_phone=phone, source=Booking.Source.ONLINE).exclude(status__in=UNPAID).first()
     if not b or not b.guest_token:
         return err("No booking found with that ID and mobile number.", 404)
     return Response({"code": b.booking_code, "key": b.guest_token})
@@ -434,13 +490,13 @@ def bookings_lookup(request):
     found = {}
     user = request.user
     if user.is_authenticated:
-        for b in Booking.objects.filter(user=user).values_list("booking_code", flat=True):
+        for b in Booking.objects.filter(user=user).exclude(status__in=UNPAID).values_list("booking_code", flat=True):
             found[b] = _booking(b)
     for it in items[:50]:
         code, key = str(it.get("code", "")).upper(), str(it.get("key", ""))
         if code in found:
             continue
-        b = Booking.objects.filter(booking_code=code).only("guest_token").first()
+        b = Booking.objects.filter(booking_code=code).exclude(status__in=UNPAID).only("guest_token").first()
         if b and b.guest_token and key and secrets.compare_digest(key, b.guest_token):
             found[code] = _booking(code)
     return Response(sorted((ticket_out(b, key=True) for b in found.values()), key=lambda t: (str(t["booked_on"]), t["code"]), reverse=True))

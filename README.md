@@ -58,7 +58,7 @@ The partner login decides where you land from the email: admin → Admin Dashboa
 Travellers can also book as guests; a guest's ticket opens with a private key saved on their device
 (or recovered with booking ID + mobile number via "Find a booking").
 
-Payments are simulated (no gateway yet): only a label like "Card ending 4242" is stored, never card numbers.
+Payments go through **Razorpay** (see "Payments" below). Only a label like "Visa ending 1111" or a UPI ID is stored, never card numbers.
 
 ## Useful commands (from `backend\`)
 
@@ -66,8 +66,41 @@ Payments are simulated (no gateway yet): only a label like "Card ending 4242" is
 |---|---|
 | `manage.py seed_demo --reset` | Wipe and reload the demo data (also: Admin → Settings → Reset demo data, development only) |
 | `manage.py complete_trips` | Mark finished trips' bookings as completed — schedule nightly |
+| `manage.py payment_jobs` | Release seats from unpaid checkouts and retry failed refunds — schedule every 5 minutes |
 | `manage.py test api` | Run the API tests (login, role access, overbooking, seat counters) |
 | `manage.py createsuperuser` | Create another admin login |
+
+## Payments (Razorpay)
+
+1. Put the keys in `backend/.env`: `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` (Dashboard → Account & Settings → API keys; use `rzp_test_` keys until launch).
+2. Checkout: `POST /api/public/bookings/` holds the seats (`pending_payment`, counted in `held_seats`) and creates a Razorpay order.
+   The traveller pays in Razorpay Checkout; `POST /api/public/bookings/<code>/pay/verify/` checks the signature, fetches the payment
+   from Razorpay (capturing it if only authorised) and confirms the booking. Closing checkout calls `/pay/abandon/` to release the seats.
+3. Unpaid holds expire after `PAYMENT_HOLD_MINUTES` (default 15). If money arrives after the seats were resold, it is refunded in full automatically.
+4. Cancellations send the refund to Razorpay (policy amount for travellers, everything for operator/admin cancellations).
+5. Webhook (needs a public HTTPS URL, so production/staging only): add `https://<your-domain>/api/payments/razorpay/webhook/`
+   on the Razorpay dashboard with events `payment.captured`, `payment.authorized`, `order.paid`, `refund.processed`, `refund.failed`,
+   and put its secret in `RAZORPAY_WEBHOOK_SECRET`. It confirms bookings even if the traveller closes the tab right after paying.
+6. Test mode: UPI ID `success@razorpay` (or `failure@razorpay`), or any card from Razorpay's test-card list. Unpaid checkouts never show
+   up for operators, admins or in My Bookings.
+
+## Operator bank details & payouts
+
+- Operators add bank details at **Operator → Bank & Payouts** (owner login only). Account number and PAN are encrypted
+  with `FIELD_ENCRYPTION_KEY` (core/crypto.py); screens and the API only ever show the last 4 characters. The IFSC is checked
+  against Razorpay's IFSC directory. Changing verified details puts the account back to "awaiting verification" and pauses payouts.
+- Admins verify or send back details at **Admin → Payouts**. Verifying creates the Razorpay objects for the current payout mode.
+- **Operator share** = base fare of each online booking (the convenience fee stays with PakkaTrip). Traveller cancellation: the
+  operator keeps the part not refunded. Operator/admin cancellation: nothing. Offline bookings are paid to the operator directly.
+- **Payout mode** (Admin → Settings):
+  - `payouts` (default) — RazorpayX. A booking's share becomes due when the trip completes (traveller cancellations: once the
+    date has passed). Admin clicks **Pay** to send everything due to an operator in one IMPS transfer (idempotency key, so retries
+    never pay twice). Failed/reversed payouts put their bookings back in the due list. Needs `RAZORPAYX_ACCOUNT_NUMBER`.
+  - `route` — Razorpay Route. When a payment is captured, the operator's share is transferred to their linked account **on hold**;
+    `complete_trips` releases it after the trip; cancellations reverse the refunded part before refunding. Route must be enabled
+    on the Razorpay account by Razorpay (not available on this account yet), and the linked-account category values in
+    payments/razorpay.py should be re-checked against Razorpay's docs at that point. Bookings whose transfer fails fall back to payouts.
+- `payment_jobs` also refreshes open payouts and releases Route transfers; webhooks handle `payout.*` and `transfer.failed`.
 
 ## How overbooking is prevented
 

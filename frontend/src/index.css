@@ -47,6 +47,8 @@
   .btn-navy { background: var(--color-navy); border-color: var(--color-navy); color: #fff; }
   .btn-navy:hover { background: var(--color-navy-2); }
   .btn-danger { background: var(--color-danger); border-color: var(--color-danger); color: #fff; }
+  .btn-green { background: var(--color-leaf); border-color: var(--color-leaf); color: #fff; }
+  .btn-green:hover { filter: brightness(.92); }
   .btn-danger:hover { background: #912018; }
   .btn-sm { padding: 5px 10px; font-size: 12.5px; border-radius: 7px; }
   .btn-ghost-green { color: var(--color-leaf); border-color: #BFE3CB; background: var(--color-leaf-soft); }

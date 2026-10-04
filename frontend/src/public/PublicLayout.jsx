@@ -32,6 +32,8 @@ export default function PublicLayout() {
   const traveller = user?.role === 'traveller' ? user : null
 
   useEffect(() => { setMenu(false); window.scrollTo(0, 0) }, [pathname])
+  const [testMode, setTestMode] = useState(false)
+  useEffect(() => { api('/public/config/').then(c => setTestMode(!!c.payments_test_mode), () => {}) }, [])
 
   const policy = async kind => {
     const titles = { cancellation: 'Cancellation & refunds', terms: 'Terms of use', privacy: 'Privacy policy' }
@@ -103,7 +105,7 @@ export default function PublicLayout() {
           </div>
           <div className="foot-bottom">
             <span>© PakkaTrip · Made in India for Indian travellers</span>
-            <span className="demo-flag">Payments are simulated — no real money moves</span>
+            {testMode && <span className="demo-flag">Razorpay test mode — no real money moves</span>}
           </div>
         </div>
       </footer>

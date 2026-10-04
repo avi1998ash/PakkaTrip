@@ -7,6 +7,7 @@ can't both succeed; the no_overbooking CHECK constraint is the final safety net.
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
@@ -139,8 +140,9 @@ def cancel_booking(booking_id, *, actor, reason="", user=None):
             amount, pct, fee_back = q["amount"], q["pct"], False
         else:
             amount, pct, fee_back = b.total_amount, Decimal(100), True
-        Refund.objects.create(booking=b, payment=payment, amount=amount, refund_pct=pct, fee_refunded=fee_back,
-                              initiated_by=actor, reason=reason, status=Refund.Status.PENDING)
+        r = Refund.objects.create(booking=b, payment=payment, amount=amount, refund_pct=pct, fee_refunded=fee_back,
+                                  initiated_by=actor, reason=reason, status=Refund.Status.PENDING)
+        transaction.on_commit(lambda: process_refund(r.pk))   # money moves only once the cancellation is saved
         payment.status = Payment.Status.REFUNDED if amount >= payment.amount else Payment.Status.PARTIALLY_REFUNDED
         payment.save(update_fields=["status", "updated_at"])
     audit(user, "booking.cancelled", b, by=actor)
@@ -158,9 +160,12 @@ def price_quote(dep, seats):
 
 
 @transaction.atomic
-def create_online_booking(*, departure_id, seats, lead_name, lead_phone, lead_email, co_travellers, payment_method,
-                          payment_detail, user=None):
-    """Traveller checkout: re-check seats under a row lock, then book and record the (demo) payment."""
+def create_online_booking(*, departure_id, seats, lead_name, lead_phone, lead_email, co_travellers, user=None):
+    """Traveller checkout, step 1: re-check seats under a row lock and hold them while the traveller pays.
+
+    The booking starts as pending_payment with its seats in held_seats; confirm_online_payment turns it
+    into a confirmed booking, and release_expired_holds frees the seats if payment never arrives.
+    """
     import secrets
     from bookings.models import BookingTraveller
     dep = _lock(departure_id)
@@ -175,18 +180,162 @@ def create_online_booking(*, departure_id, seats, lead_name, lead_phone, lead_em
         departure=dep, package=dep.package, operator=dep.package.operator, source=Booking.Source.ONLINE,
         lead_name=lead_name, lead_phone=lead_phone, lead_email=lead_email, seats=seats,
         price_per_person=q["price"], base_amount=q["base"], fee_rate=Decimal(str(q["fee_rate"])), convenience_fee=q["fee"],
-        total_amount=q["total"], status=Booking.Status.CONFIRMED, confirmed_at=timezone.now(),
-        guest_token=secrets.token_urlsafe(32))
+        total_amount=q["total"], status=Booking.Status.PENDING_PAYMENT, guest_token=secrets.token_urlsafe(32))
     BookingTraveller.objects.create(booking=b, full_name=lead_name, is_lead=True)
     for name in co_travellers:
         BookingTraveller.objects.create(booking=b, full_name=name)
-    Departure.objects.filter(pk=dep.pk).update(booked_seats=F("booked_seats") + seats)
-    # Demo gateway: a real integration creates the order first and captures it from a verified webhook.
-    Payment.objects.create(booking=b, gateway="demo", gateway_order_id=f"order_{b.booking_code}_{secrets.token_hex(4)}",
-                           gateway_payment_id=f"pay_{b.booking_code}_{secrets.token_hex(4)}", method=payment_method,
-                           method_detail=payment_detail[:60], amount=b.total_amount, status=Payment.Status.CAPTURED, paid_at=timezone.now())
-    audit(user if user and user.is_authenticated else None, "booking.online_created", b, seats=seats)
+    Departure.objects.filter(pk=dep.pk).update(held_seats=F("held_seats") + seats)
+    audit(user if user and user.is_authenticated else None, "booking.online_held", b, seats=seats)
     return b
+
+
+# ---------------------------------------------------------------- online payment (Razorpay)
+
+class LatePaymentError(SeatError):
+    """Money arrived after the seat hold lapsed and the seats are gone; the payment is refunded in full."""
+
+
+def hold_expires_at(b):
+    return b.created_at + timedelta(minutes=settings.PAYMENT_HOLD_MINUTES)
+
+
+def _expire(b, reason):
+    """Locked pending_payment booking → expired; its held seats go back on sale."""
+    Departure.objects.filter(pk=b.departure_id).update(held_seats=F("held_seats") - b.seats)
+    b.status, b.cancelled_at, b.cancelled_by, b.cancellation_reason = Booking.Status.EXPIRED, timezone.now(), Booking.Actor.SYSTEM, reason
+    b.save(update_fields=["status", "cancelled_at", "cancelled_by", "cancellation_reason", "updated_at"])
+    b.payments.filter(status=Payment.Status.CREATED).update(status=Payment.Status.FAILED)
+    audit(None, "booking.hold_expired", b, reason=reason)
+
+
+def release_expired_holds(departure_id=None):
+    """Free seats held by checkouts that weren't paid within PAYMENT_HOLD_MINUTES. Returns how many."""
+    cutoff = timezone.now() - timedelta(minutes=settings.PAYMENT_HOLD_MINUTES)
+    qs = Booking.objects.filter(status=Booking.Status.PENDING_PAYMENT, created_at__lt=cutoff)
+    if departure_id:
+        qs = qs.filter(departure_id=departure_id)
+    n = 0
+    for pk in qs.values_list("pk", flat=True):
+        with transaction.atomic():
+            b = Booking.objects.select_for_update().get(pk=pk)
+            if b.status == Booking.Status.PENDING_PAYMENT:
+                _lock(b.departure_id)
+                _expire(b, "Payment not completed in time")
+                n += 1
+    return n
+
+
+@transaction.atomic
+def abandon_payment(booking_id, reason="Payment cancelled by traveller"):
+    """Traveller closed checkout (or the order couldn't be created): release the hold right away."""
+    b = Booking.objects.select_for_update().get(pk=booking_id)
+    if b.status == Booking.Status.PENDING_PAYMENT:
+        _lock(b.departure_id)
+        _expire(b, reason)
+    return b
+
+
+@transaction.atomic
+def confirm_online_payment(booking_id, *, order_id, payment_id, method="", detail=""):
+    """A captured, verified payment → confirmed booking. Safe to call twice (checkout callback + webhook)."""
+    b = Booking.objects.select_for_update().get(pk=booking_id)
+    pay = Payment.objects.select_for_update().get(booking=b, gateway_order_id=order_id)
+    if pay.status == Payment.Status.CAPTURED and b.status in (Booking.Status.CONFIRMED, Booking.Status.COMPLETED):
+        return b
+    if b.status == Booking.Status.PENDING_PAYMENT:
+        _lock(b.departure_id)
+        Departure.objects.filter(pk=b.departure_id).update(held_seats=F("held_seats") - b.seats, booked_seats=F("booked_seats") + b.seats)
+    elif b.status == Booking.Status.EXPIRED:
+        # Paid after the hold lapsed: take the seats again if they're still free, else refund.
+        dep = _lock(b.departure_id)
+        st = seat_stats(dep)
+        if st["departed"] or dep.status != Departure.Status.OPEN or st["available"] < b.seats:
+            raise LatePaymentError("Your payment arrived after the seat hold expired and the seats were taken. "
+                                   "A full refund has been started.")
+        Departure.objects.filter(pk=b.departure_id).update(booked_seats=F("booked_seats") + b.seats)
+        b.cancelled_at, b.cancelled_by, b.cancellation_reason = None, "", ""
+    else:
+        raise SeatError("This booking can no longer take a payment.")
+    b.status, b.confirmed_at = Booking.Status.CONFIRMED, timezone.now()
+    b.save(update_fields=["status", "confirmed_at", "cancelled_at", "cancelled_by", "cancellation_reason", "updated_at"])
+    pay.status, pay.gateway_payment_id, pay.method, pay.method_detail, pay.paid_at = (
+        Payment.Status.CAPTURED, payment_id, method[:12], detail[:60], timezone.now())
+    pay.save(update_fields=["status", "gateway_payment_id", "method", "method_detail", "paid_at", "updated_at"])
+    audit(None, "booking.paid", b, payment=payment_id)
+    from payments.payouts import create_route_transfer
+    transaction.on_commit(lambda: create_route_transfer(b.pk))   # Route mode only; no-op otherwise
+    return b
+
+
+@transaction.atomic
+def refund_late_payment(booking_id, *, order_id, payment_id, method="", detail=""):
+    """Record a payment we can't honour and refund all of it, including the fee."""
+    b = Booking.objects.select_for_update().get(pk=booking_id)
+    pay = Payment.objects.select_for_update().get(booking=b, gateway_order_id=order_id)
+    if pay.status != Payment.Status.FAILED and pay.status != Payment.Status.CREATED:
+        return b
+    pay.status, pay.gateway_payment_id, pay.method, pay.method_detail, pay.paid_at = (
+        Payment.Status.REFUNDED, payment_id, method[:12], detail[:60], timezone.now())
+    pay.save(update_fields=["status", "gateway_payment_id", "method", "method_detail", "paid_at", "updated_at"])
+    r = Refund.objects.create(booking=b, payment=pay, amount=pay.amount, refund_pct=Decimal(100), fee_refunded=True,
+                              initiated_by=Booking.Actor.SYSTEM, reason="Paid after seat hold expired; seats no longer available")
+    transaction.on_commit(lambda: process_refund(r.pk))
+    audit(None, "booking.late_payment_refunded", b, payment=payment_id)
+    return b
+
+
+def settle_online_payment(booking_id, *, order_id, payment_id):
+    """Check a Razorpay payment with the gateway (capturing it if only authorised) and confirm the booking.
+
+    Raises GatewayError if Razorpay can't be reached, SeatError if the payment isn't usable, and
+    LatePaymentError (after starting a full refund) if the seats were lost while the traveller paid.
+    """
+    from payments import razorpay
+    b = Booking.objects.get(pk=booking_id)
+    p = razorpay.fetch_payment(payment_id)
+    if p.get("order_id") != order_id or int(p.get("amount", 0)) != razorpay.to_paise(b.total_amount):
+        raise SeatError("This payment doesn't match the booking.")
+    if p.get("status") == "authorized":
+        try:
+            p = razorpay.capture_payment(payment_id, b.total_amount)
+        except razorpay.GatewayError:
+            p = razorpay.fetch_payment(payment_id)   # the webhook may have captured it already
+    if p.get("status") != "captured":
+        raise SeatError("The payment didn't go through. No money was taken — please try again.")
+    method, detail = razorpay.method_label(p)
+    try:
+        return confirm_online_payment(b.pk, order_id=order_id, payment_id=payment_id, method=method, detail=detail)
+    except LatePaymentError:
+        refund_late_payment(b.pk, order_id=order_id, payment_id=payment_id, method=method, detail=detail)
+        raise
+
+
+def process_refund(refund_id):
+    """Send a pending refund to Razorpay. Demo-gateway refunds stay as records only.
+
+    Failures leave the refund pending with a reason; `manage.py payment_jobs` retries them.
+    """
+    from payments import razorpay
+    r = Refund.objects.select_related("payment", "booking").get(pk=refund_id)
+    if r.status != Refund.Status.PENDING or r.payment.gateway != "razorpay":
+        return r
+    if r.amount <= 0:
+        r.status, r.processed_at = Refund.Status.PROCESSED, timezone.now()
+        r.save(update_fields=["status", "processed_at"])
+        return r
+    from payments.payouts import reverse_for_refund
+    reverse_for_refund(r)   # Route: take the refunded part back from the operator's transfer first
+    try:
+        res = razorpay.refund_payment(r.payment.gateway_payment_id, r.amount, notes={"booking": r.booking.booking_code})
+    except razorpay.GatewayError as e:
+        r.failure_reason = str(e)[:200]
+        r.save(update_fields=["failure_reason"])
+        return r
+    r.gateway_refund_id, r.failure_reason = res["id"], ""
+    r.status = Refund.Status.PROCESSED if res.get("status") == "processed" else Refund.Status.PROCESSING
+    r.processed_at = timezone.now() if r.status == Refund.Status.PROCESSED else None
+    r.save(update_fields=["gateway_refund_id", "failure_reason", "status", "processed_at"])
+    return r
 
 
 def refund_amount(b):
