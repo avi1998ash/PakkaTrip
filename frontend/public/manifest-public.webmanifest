@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "PakkaTrip — Book verified trips",
+  "short_name": "PakkaTrip",
+  "description": "Compare and book weekend trip packages from verified local operators.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F6FA",
+  "theme_color": "#0B2E59",
+  "categories": ["travel"],
+  "icons": [
+    { "src": "/icons/public-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/public-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/public-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/public-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

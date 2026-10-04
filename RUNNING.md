@@ -66,6 +66,23 @@ npm run dev
 | `Port 5173 is in use` / `port 8000 already in use` | An old server is still running. Close it, or find it with `netstat -ano \| findstr :5173` and end it in Task Manager. |
 | Payment step fails | Put Razorpay **test** keys (`rzp_test_...`) in `backend\.env`. See README "Payments". In test mode use UPI `success@razorpay`. |
 
-## 4. Stop
+## 4. Install the apps on a phone (PWA)
+
+The site installs as two phone apps: **PakkaTrip** (orange icon, traveller site) and **PakkaTrip Partner** (navy icon,
+opens on partner login). Chrome offers whichever app matches the page you're on.
+
+1. Start the backend as usual, but start the frontend with `npm run dev:lan` instead of `npm run dev`. If Windows
+   Firewall asks about Node.js, click **Allow** (private networks).
+2. Find the PC's Wi-Fi address with `ipconfig` (IPv4 Address, e.g. `192.168.1.5`). The phone must be on the same Wi-Fi.
+3. Chrome only installs apps over HTTPS, so for Wi-Fi testing allow this one address on the phone: open
+   `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, enter `http://192.168.1.5:5173`, set it to
+   **Enabled** and tap **Relaunch**. Not needed once the site is on a real HTTPS domain.
+4. Traveller app: open `http://192.168.1.5:5173` → Chrome menu (⋮) → **Install app** (or **Add to Home screen**).
+5. Partner app: open `http://192.168.1.5:5173/partner/login` → Chrome menu (⋮) → **Install app**.
+
+Without internet the apps show a "You're offline" page; prices, seats and bookings are never cached. On iPhone use
+Safari → Share → **Add to Home Screen**.
+
+## 5. Stop
 
 Press `Ctrl+C` in each terminal.

@@ -5,6 +5,7 @@ import { FeedbackProvider } from './components/feedback'
 import Shell, { RequireRole } from './components/Shell'
 import './index.css'
 import { AuthProvider } from './lib/auth'
+import { registerServiceWorker, useAppManifest } from './lib/pwa'
 import AdminApplications from './pages/admin/Applications'
 import AdminBookings from './pages/admin/Bookings'
 import AdminDashboard from './pages/admin/Dashboard'
@@ -32,9 +33,17 @@ import Search from './public/Search'
 import Ticket from './public/Ticket'
 import Trip from './public/Trip'
 
+function AppManifest() {
+  useAppManifest()
+  return null
+}
+
+registerServiceWorker()
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
+      <AppManifest />
       <AuthProvider>
         <FeedbackProvider>
           <Routes>

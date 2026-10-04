@@ -2,8 +2,26 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>PakkaTrip Partner Portal</title>
+    <meta name="theme-color" content="#0B2E59" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta id="app-title" name="apple-mobile-web-app-title" content="PakkaTrip" />
+    <link id="app-manifest" rel="manifest" href="/manifest-public.webmanifest" />
+    <link id="app-icon" rel="icon" type="image/png" href="/icons/public-192.png" />
+    <link id="app-apple-icon" rel="apple-touch-icon" href="/icons/public-apple-180.png" />
+    <script>
+      // Pick the installable app before first paint: partner pages offer "PakkaTrip Partner", the rest "PakkaTrip".
+      // src/lib/pwa.js keeps this in sync as the user navigates.
+      if (/^\/(partner|operator|admin)(\/|$)/.test(location.pathname)) {
+        document.getElementById('app-manifest').href = '/manifest-partner.webmanifest'
+        document.getElementById('app-icon').href = '/icons/partner-192.png'
+        document.getElementById('app-apple-icon').href = '/icons/partner-apple-180.png'
+        document.getElementById('app-title').content = 'PT Partner'
+      }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   </head>
