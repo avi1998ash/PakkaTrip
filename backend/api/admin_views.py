@@ -12,10 +12,10 @@ from bookings.services import SeatError, cancel_booking
 from catalog.models import Package
 from core.demo_seed import seed
 from core.models import PlatformSetting, audit
-from operators.models import Operator
+from operators.models import Operator, OperatorBankAccount
 
 from .permissions import IsAdminRole
-from .serializers import (API_STATUS, OperatorIn, PackageIn, SettingsIn, booking_out, booking_qs, operator_out,
+from .serializers import (API_STATUS, UNPAID, OperatorIn, PackageIn, SettingsIn, booking_out, booking_qs, operator_out,
                           package_detail_out, package_out)
 
 EARNED = [Booking.Status.CONFIRMED, Booking.Status.COMPLETED]
@@ -28,7 +28,7 @@ def err(msg, code=400):
 @api_view(["GET"])
 @permission_classes([IsAdminRole])
 def dashboard(request):
-    bk = Booking.objects.all()
+    bk = Booking.objects.exclude(status__in=UNPAID)
     earned = bk.filter(status__in=EARNED).aggregate(gmv=Sum("base_amount"), fees=Sum("convenience_fee"), pax=Sum("seats"))
     s = PlatformSetting.get_all()
     return Response({
@@ -54,6 +54,7 @@ def nav_counts(request):
         "operators": Operator.objects.filter(status=Operator.Status.PENDING).count(),
         "packages": Package.objects.filter(status=Package.Status.PENDING_REVIEW).count(),
         "bookings": Booking.objects.filter(status__in=API_STATUS["pending"]).count(),
+        "payouts": OperatorBankAccount.objects.filter(status=OperatorBankAccount.Status.PENDING).count(),
     })
 
 
@@ -238,8 +239,11 @@ def platform_settings(request):
         PlatformSetting.put("fee_rate_pct", float(d["fee_rate"]), request.user)
         PlatformSetting.put("fee_min_inr", d["fee_min"], request.user)
         PlatformSetting.put("require_verified_operator", d["require_verified"], request.user)
+        if "payout_mode" in d:
+            PlatformSetting.put("payout_mode", d["payout_mode"], request.user)
     s = PlatformSetting.get_all()
     return Response({"fee_rate": s["fee_rate_pct"], "fee_min": s["fee_min_inr"], "require_verified": s["require_verified_operator"],
+                     "payout_mode": s["payout_mode"],
                      "can_reset": settings.DEBUG})
 
 

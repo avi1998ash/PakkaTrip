@@ -18,7 +18,7 @@ from reviews.models import Review
 
 from .admin_views import err, filter_bookings
 from .permissions import IsOperatorRole
-from .serializers import (API_STATUS, DepartureIn, OfflineBookingIn, PackageIn, booking_out, booking_qs, departure_out,
+from .serializers import (API_STATUS, UNPAID, DepartureIn, OfflineBookingIn, PackageIn, booking_out, booking_qs, departure_out,
                           package_detail_out, package_out, review_out)
 
 EARNED = [Booking.Status.CONFIRMED, Booking.Status.COMPLETED]
@@ -52,7 +52,7 @@ def dashboard(request):
     today = timezone.localdate()
     upcoming = list(my_departures(request).filter(departure_date__gte=today).order_by("departure_date"))
     open_deps = [d for d in upcoming if d.status == Departure.Status.OPEN]
-    bk = Booking.objects.filter(operator=request.operator)
+    bk = Booking.objects.filter(operator=request.operator).exclude(status__in=UNPAID)
     pending = bk.filter(status__in=PENDING).aggregate(n=Count("id"), seats=Sum("seats"))
     rv = Review.objects.filter(operator=request.operator).aggregate(avg=Avg("rating"), n=Count("id"))
     return Response({
@@ -239,7 +239,7 @@ def booking_action(request, code, action):
 @api_view(["GET"])
 @permission_classes([IsOperatorRole])
 def earnings(request):
-    bk = Booking.objects.filter(operator=request.operator)
+    bk = Booking.objects.filter(operator=request.operator).exclude(status__in=UNPAID)
     agg = lambda qs: qs.aggregate(n=Count("id"), amount=Sum("base_amount"))  # noqa: E731
     done, up = agg(bk.filter(status=Booking.Status.COMPLETED)), agg(bk.filter(status=Booking.Status.CONFIRMED))
     pend, lost = agg(bk.filter(status__in=PENDING)), agg(bk.filter(status__in=API_STATUS["cancelled"]))

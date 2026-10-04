@@ -17,8 +17,10 @@ ADMIN_EMAIL = "admin@pakkatrip.com"
 # Booking status names the UI uses (same as the prototype)
 UI_STATUS = {"pending_confirmation": "pending", "pending_payment": "pending", "confirmed": "confirmed",
              "completed": "completed", "cancelled": "cancelled", "expired": "cancelled"}
-API_STATUS = {"pending": ["pending_confirmation", "pending_payment"], "confirmed": ["confirmed"],
-              "completed": ["completed"], "cancelled": ["cancelled", "expired"]}
+# Checkouts that were never paid aren't bookings yet: hidden from partners, travellers' lists and stats.
+UNPAID = ["pending_payment", "expired"]
+API_STATUS = {"pending": ["pending_confirmation"], "confirmed": ["confirmed"],
+              "completed": ["completed"], "cancelled": ["cancelled"]}
 UI_PKG_STATUS = {"pending_review": "pending", "draft": "pending", "approved": "approved", "rejected": "rejected", "unlisted": "pending"}
 
 
@@ -78,7 +80,8 @@ def booking_out(b, detail=False):
 
 
 def booking_qs():
-    return (Booking.objects.select_related("package__from_city", "package__to_city", "operator", "departure")
+    return (Booking.objects.exclude(status__in=UNPAID)
+            .select_related("package__from_city", "package__to_city", "operator", "departure")
             .prefetch_related("refunds", "payments", "travellers"))
 
 
@@ -183,3 +186,4 @@ class SettingsIn(serializers.Serializer):
     fee_rate = serializers.DecimalField(max_digits=4, decimal_places=1, min_value=0, max_value=20)
     fee_min = serializers.IntegerField(min_value=0, max_value=999)
     require_verified = serializers.BooleanField()
+    payout_mode = serializers.ChoiceField(choices=["payouts", "route"], required=False)

@@ -22,7 +22,7 @@ export default function AdminSettings() {
     e.preventDefault()
     if (!e.currentTarget.checkValidity()) { e.currentTarget.reportValidity(); return }
     try {
-      await api('/admin/settings/', { method: 'PUT', body: { fee_rate: Number(s.fee_rate), fee_min: Number(s.fee_min), require_verified: s.require_verified } })
+      await api('/admin/settings/', { method: 'PUT', body: { fee_rate: Number(s.fee_rate), fee_min: Number(s.fee_min), require_verified: s.require_verified, payout_mode: s.payout_mode } })
       setDraft(null); reload(); toast('Settings saved')
     } catch (err) { toast(err.message, true) }
   }
@@ -44,6 +44,18 @@ export default function AdminSettings() {
               Example: a ₹6,499 booking pays <b>{inr(feeFor(6499, s.fee_rate, s.fee_min))}</b>.</div></div>
             <div className="full"><label className="check"><input type="checkbox" checked={s.require_verified} onChange={e => set({ require_verified: e.target.checked })} /> Only approve packages from verified operators</label></div>
           </div>
+          <div className="mt-4"><button className="btn btn-navy" type="submit">Save settings</button></div>
+        </form>
+      </div>
+      <div className="card max-w-[640px]">
+        <div className="card-head"><h3>Operator payouts</h3></div>
+        <form className="p-[18px]" onSubmit={save} noValidate>
+          <label className="check items-start"><input type="radio" name="payout_mode" checked={s.payout_mode === 'payouts'} onChange={() => set({ payout_mode: 'payouts' })} />
+            <span><b>RazorpayX payouts</b> — you send each operator what's due from Admin → Payouts after their trips complete. Works on any Razorpay account.</span></label>
+          <label className="check items-start mt-2.5"><input type="radio" name="payout_mode" checked={s.payout_mode === 'route'} onChange={() => set({ payout_mode: 'route' })} />
+            <span><b>Razorpay Route (automatic split)</b> — each payment is split as it's captured: the operator's share goes to their linked account, held until the trip completes.
+              Razorpay must enable Route on your account first.</span></label>
+          <div className="help mt-2">Switching modes applies to new bookings. Operators' bank accounts need verifying again in the new mode (Admin → Payouts).</div>
           <div className="mt-4"><button className="btn btn-navy" type="submit">Save settings</button></div>
         </form>
       </div>

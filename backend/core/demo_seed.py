@@ -13,11 +13,12 @@ from django.utils import timezone
 from accounts.models import User
 from bookings.models import Booking, BookingTraveller, next_booking_code
 from catalog.models import City, Package, PackageFacility, PackageImage, PackageItineraryDay, unique_slug
+from core.crypto import encrypt
 from core.demo_media import add_demo_media, wipe_media
 from core.models import DEFAULT_SETTINGS, AuditLog, CancellationRule, PlatformSetting, fee_for
 from inventory.models import Departure
-from operators.models import Operator, OperatorMember
-from payments.models import Payment, Refund
+from operators.models import Operator, OperatorBankAccount, OperatorMember
+from payments.models import Payment, Payout, Refund, Transfer
 from reviews.models import Review, refresh_ratings
 
 ADMIN_EMAIL, ADMIN_PASSWORD = "admin@pakkatrip.com", "admin123"
@@ -98,7 +99,7 @@ class Rnd:
 
 def wipe():
     """Delete all marketplace data (keeps admin users)."""
-    for model in (Review, Refund, Payment, BookingTraveller, Booking, Departure, PackageImage, PackageFacility, PackageItineraryDay):
+    for model in (Review, Transfer, Refund, Payout, Payment, BookingTraveller, Booking, Departure, PackageImage, PackageFacility, PackageItineraryDay):
         model.objects.all().delete()
     wipe_media()
     Package.all_objects.all().delete()
@@ -149,6 +150,15 @@ def seed(reset=False):
             verified_at=at(day(-joined + 2)) if verified else None, verified_by=admin if verified else None)
         OperatorMember.objects.create(operator=op, user=user, member_role=OperatorMember.Role.OWNER)
         ops[key] = op
+
+    # Bank details waiting for admin verification (test values; RazorpayX test mode accepts any valid IFSC).
+    for key, holder, number, pan in (("OP101", "Himalayan Rides", "50100123456789", "ABCPT1234K"),
+                                     ("OP102", "Ganga Travels", "50100987654321", "ABCPN5678L")):
+        OperatorBankAccount.objects.create(
+            operator=ops[key], holder_name=holder, account_number_enc=encrypt(number), account_last4=number[-4:], ifsc="HDFC0000001",
+            bank_name="HDFC Bank", branch="Sandoz House, Worli", account_type="current", pan_enc=encrypt(pan), pan_last4=pan[-4:],
+            business_type="proprietorship", address_line="12 Main Market", address_city=ops[key].city.name,
+            address_state="Delhi" if key == "OP101" else "Uttarakhand", pincode="110001" if key == "OP101" else "249201")
 
     pkgs = {}
     for key, opk, title, frm, to, nights, price, seats, status in PACKAGES:
@@ -280,3 +290,4 @@ def seed(reset=False):
 
     return (f"Seeded {Operator.objects.count()} operators, {Package.objects.count()} packages, "
             f"{Departure.objects.count()} departures, {Booking.objects.count()} bookings, {Review.objects.count()} reviews.")
+

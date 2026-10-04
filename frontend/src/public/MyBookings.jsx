@@ -34,7 +34,7 @@ export default function MyBookings() {
           <div className="line"><span>Convenience fee</span><span>Non-refundable ({inr(b.fee)})</span></div>
           <div className="line total"><span>You get back</span><span style={{ color: Number(q.amount) ? 'var(--green)' : 'var(--red)' }}>{inr(q.amount)}</span></div>
         </div>
-        <p className="help">Your {b.seats > 1 ? 'seats go' : 'seat goes'} back to the operator straight away. Refunds are simulated in this demo — no money moves.</p>
+        <p className="help">Your {b.seats > 1 ? 'seats go' : 'seat goes'} back to the operator straight away. Refunds go back to your original payment method, usually within 5–7 working days.</p>
       </div>
     ), onSubmit: async () => {
       const t = await api(`/public/bookings/${b.code}/cancel/`, { method: 'POST', body: { key: keyFor(b) } })

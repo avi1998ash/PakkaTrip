@@ -55,6 +55,8 @@ class Booking(models.Model):
     notes = models.TextField(blank=True, default="")
     # Secret for guests (no account) to open their own ticket: /ticket/<code>?key=<guest_token>
     guest_token = models.CharField(max_length=43, unique=True, null=True, blank=True)
+    # RazorpayX payout that paid the operator's share (null = not paid out yet, or paid via Route instead)
+    payout = models.ForeignKey("payments.Payout", null=True, blank=True, on_delete=models.SET_NULL, related_name="bookings")
     created_at = models.DateTimeField(default=timezone.now)   # "booked on"
     updated_at = models.DateTimeField(auto_now=True)
 

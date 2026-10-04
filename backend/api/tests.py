@@ -1,8 +1,11 @@
+import hashlib
+import hmac
 import io
 import json
 import shutil
 import tempfile
 from datetime import timedelta
+from unittest import mock
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -12,6 +15,11 @@ from PIL import Image
 from rest_framework.test import APITestCase
 
 from bookings.models import Booking
+from core.crypto import decrypt
+from core.models import PlatformSetting
+from operators.models import OperatorBankAccount
+from payments.models import Payment, Payout, Refund, Transfer
+from payments.payouts import due_bookings, release_completed_transfers
 from core.demo_seed import seed
 from inventory.models import Departure
 from operators.models import Operator
@@ -20,7 +28,9 @@ from operators.models import Operator
 TEST_MEDIA = tempfile.mkdtemp(prefix="pakkatrip-test-media-")
 
 
-@override_settings(MEDIA_ROOT=TEST_MEDIA)   # never touch real uploads (seed() wipes the media folder)
+@override_settings(MEDIA_ROOT=TEST_MEDIA,   # never touch real uploads (seed() wipes the media folder)
+                   RAZORPAY_KEY_ID="rzp_test_unit", RAZORPAY_KEY_SECRET="unit-secret", RAZORPAY_WEBHOOK_SECRET="hook-secret",
+                   RAZORPAYX_ACCOUNT_NUMBER="2323230000000000")
 class PortalTests(APITestCase):
     @classmethod
     def tearDownClass(cls):
@@ -38,6 +48,32 @@ class PortalTests(APITestCase):
 
     def setUp(self):
         cache.clear()   # login/find rate limits are per-minute; don't let earlier tests trip them
+        # Fake Razorpay: orders, payments and refunds live in memory; nothing goes over the network.
+        self.rzp_payments, self.rzp_refunds, self.rzp_calls = {}, [], []
+        self.payout_state = {"status": "processing"}
+        call = lambda name, ret: lambda *a, **k: self.rzp_calls.append((name, a, k)) or ret  # noqa: E731
+        fakes = {
+            "ifsc_lookup": lambda code: None if code == "ABCD0123456" else {"bank": "HDFC Bank", "branch": "Worli", "city": "Mumbai", "imps": True, "neft": True},
+            "create_contact": call("contact", {"id": "cont_1"}),
+            "create_fund_account": call("fund_account", {"id": "fa_1"}),
+            "create_payout": lambda *a, **k: self.rzp_calls.append(("payout", a, k)) or {"id": "pout_1", **self.payout_state},
+            "fetch_payout": lambda pid: {"id": pid, **self.payout_state},
+            "create_linked_account": call("linked_account", {"id": "acc_1"}),
+            "create_stakeholder": call("stakeholder", {"id": "sth_1"}),
+            "request_route_product": call("route_product", {"id": "acc_prd_1"}),
+            "set_route_settlement": call("route_settlement", {"id": "acc_prd_1"}),
+            "create_transfer": lambda *a, **k: self.rzp_calls.append(("transfer", a, k)) or {"id": f"trf_{len(self.rzp_calls)}"},
+            "release_transfer": call("release", {}),
+            "reverse_transfer": call("reverse", {}),
+            "create_order": lambda amount, receipt, notes=None: {"id": f"order_{receipt}", "amount": int(amount * 100), "currency": "INR"},
+            "fetch_payment": lambda pid: dict(self.rzp_payments[pid]),
+            "capture_payment": lambda pid, amount: {**self.rzp_payments[pid], "status": "captured"},
+            "refund_payment": lambda pid, amount, notes=None: self.rzp_refunds.append((pid, amount)) or {"id": f"rfnd_{len(self.rzp_refunds)}", "status": "processed"},
+        }
+        for name, fn in fakes.items():
+            patcher = mock.patch(f"payments.razorpay.{name}", side_effect=fn)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def login(self, email, password):
         r = self.client.post("/api/auth/login/", {"email": email, "password": password}, format="json")
@@ -190,19 +226,56 @@ class PortalTests(APITestCase):
         self.assertEqual(len(r.data["images"]), 4)
 
     # ---- traveller site
-    def _book(self, dep, seats, **extra):
+    def _checkout(self, dep, seats):
         body = {"departure_id": dep.id, "seats": seats, "name": "Guest Traveller", "phone": "9123456780", "email": "guest@example.com",
-                "co_travellers": ["Friend One"], "payment_method": "upi", "payment_detail": "GPay", **extra}
+                "co_travellers": ["Friend One"]}
         return self.client.post("/api/public/bookings/", body, format="json")
 
-    def test_guest_booking_reaches_operator_and_updates_seats(self):
-        dep = Departure.objects.get(package__title="Dharamshala & McLeodganj", departure_date=self.today + timedelta(days=10))
-        r = self._book(dep, 2)
+    def _pay(self, checkout, status="captured", signature=None):
+        """What Razorpay checkout's success handler sends back, signed with the (test) key secret."""
+        order_id, pid = checkout["razorpay"]["order_id"], f"pay_{checkout['code']}"
+        self.rzp_payments[pid] = {"id": pid, "order_id": order_id, "amount": checkout["razorpay"]["amount"], "status": status,
+                                  "method": "upi", "vpa": "guest@okhdfc"}
+        sig = signature or hmac.new(b"unit-secret", f"{order_id}|{pid}".encode(), hashlib.sha256).hexdigest()
+        return self.client.post(f"/api/public/bookings/{checkout['code']}/pay/verify/",
+                                {"key": checkout["key"], "razorpay_order_id": order_id, "razorpay_payment_id": pid,
+                                 "razorpay_signature": sig}, format="json")
+
+    def _book(self, dep, seats):
+        r = self._checkout(dep, seats)
         self.assertEqual(r.status_code, 201, r.data)
+        return self._pay(r.data)
+
+    def dharamshala(self):
+        return Departure.objects.get(package__title="Dharamshala & McLeodganj", departure_date=self.today + timedelta(days=10))
+
+    def test_checkout_holds_seats_until_paid(self):
+        dep = self.dharamshala()
+        r = self._checkout(dep, 2)
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["razorpay"]["amount"], 1127300)     # Rs 11,273 in paise
+        dep.refresh_from_db()
+        self.assertEqual((dep.booked_seats, dep.held_seats), (0, 2))
+        # an unpaid checkout isn't a booking yet: no ticket, not in the operator's list
+        self.assertEqual(self.client.get(f"/api/public/bookings/{r.data['code']}/?key={r.data['key']}").status_code, 404)
+        self.login("himalayan@pakkatrip.com", "operator123")
+        self.assertFalse(any(b["id"] == r.data["code"] for b in self.client.get("/api/operator/bookings/").data))
+
+    def test_guest_booking_reaches_operator_and_updates_seats(self):
+        dep = self.dharamshala()
+        r = self._book(dep, 2)
+        self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual((r.data["amount"], r.data["fee"], r.data["total"]), (10998, 275, 11273))   # 2.5% of 10,998
+        self.assertEqual(r.data["payment"], "UPI · guest@okhdfc")
+        dep.refresh_from_db()
+        self.assertEqual((dep.booked_seats, dep.held_seats), (2, 0))
+        code, key = r.data["code"], r.data["key"]
+        self.assertEqual(Payment.objects.get(booking__booking_code=code).status, "captured")
+        # verifying twice (checkout callback + webhook) doesn't double-count seats
+        again = self._pay({"code": code, "key": key, "razorpay": {"order_id": f"order_{code}", "amount": 1127300}})
+        self.assertEqual(again.status_code, 200)
         dep.refresh_from_db()
         self.assertEqual(dep.booked_seats, 2)
-        code, key = r.data["code"], r.data["key"]
         # the operator and the admin both see it
         self.login("himalayan@pakkatrip.com", "operator123")
         self.assertTrue(any(b["id"] == code for b in self.client.get("/api/operator/bookings/").data))
@@ -213,28 +286,149 @@ class PortalTests(APITestCase):
         self.assertEqual(self.client.get(f"/api/public/bookings/{code}/").status_code, 404)
         self.assertEqual(self.client.get(f"/api/public/bookings/{code}/?key={key}").status_code, 200)
 
-    def test_public_booking_cannot_overbook_or_use_blocked_date(self):
-        self.assertIn("Only 2 seats", self._book(self.two_left, 3).data["detail"])
-        self.assertEqual(self._book(self.blocked, 1).status_code, 400)
-        self.assertEqual(self._book(self.sold_out, 1).status_code, 400)
+    def test_forged_or_failed_payment_is_rejected(self):
+        r = self._checkout(self.dharamshala(), 1)
+        self.assertEqual(self._pay(r.data, signature="0" * 64).status_code, 400)
+        self.assertEqual(self._pay(r.data, status="failed").status_code, 400)
+        self.assertEqual(Booking.objects.get(booking_code=r.data["code"]).status, "pending_payment")
 
-    def test_minimum_fee_and_card_number_guard(self):
+    def test_abandoned_and_expired_holds_release_seats(self):
+        dep = self.dharamshala()
+        r = self._checkout(dep, 3)
+        self.client.post(f"/api/public/bookings/{r.data['code']}/pay/abandon/", {"key": r.data["key"]}, format="json")
+        dep.refresh_from_db()
+        self.assertEqual(dep.held_seats, 0)
+        self.assertEqual(Booking.objects.get(booking_code=r.data["code"]).status, "expired")
+        r = self._checkout(dep, 2)
+        Booking.objects.filter(booking_code=r.data["code"]).update(created_at=timezone.now() - timedelta(minutes=16))
+        self.client.post("/api/public/quote/", {"departure_id": dep.id, "seats": 1}, format="json")   # page loads sweep old holds
+        dep.refresh_from_db()
+        self.assertEqual(dep.held_seats, 0)
+
+    def test_late_payment_after_seats_gone_is_refunded(self):
+        r = self._checkout(self.two_left, 2)
+        b = Booking.objects.get(booking_code=r.data["code"])
+        Booking.objects.filter(pk=b.pk).update(created_at=timezone.now() - timedelta(minutes=16))
+        self.assertEqual(self._book(self.two_left, 2).status_code, 200)   # hold lapses; someone else takes the last 2 seats
+        with self.captureOnCommitCallbacks(execute=True):
+            late = self._pay(r.data)
+        self.assertEqual(late.status_code, 409)
+        refund = Refund.objects.get(booking=b)
+        self.assertEqual((refund.amount, refund.status), (b.total_amount, "processed"))
+        self.assertIn((f"pay_{b.booking_code}", b.total_amount), self.rzp_refunds)
+
+    def test_public_booking_cannot_overbook_or_use_blocked_date(self):
+        self.assertIn("Only 2 seats", self._checkout(self.two_left, 3).data["detail"])
+        self.assertEqual(self._checkout(self.blocked, 1).status_code, 400)
+        self.assertEqual(self._checkout(self.sold_out, 1).status_code, 400)
+
+    def test_minimum_fee(self):
         dep = Departure.objects.filter(package__title="Rishikesh Rafting & Camping", departure_date__gt=self.today,
                                        status="open").order_by("departure_date").first()
         r = self.client.post("/api/public/quote/", {"departure_id": dep.id, "seats": 1}, format="json")
         self.assertEqual(r.data["fee"], 82)    # 2.5% of 3,299 = 82
-        r = self._book(dep, 1, payment_method="card", payment_detail="4111 1111 1111 1111")
-        self.assertEqual(r.status_code, 400)
 
-    def test_customer_cancellation_follows_policy(self):
-        dep = Departure.objects.get(package__title="Dharamshala & McLeodganj", departure_date=self.today + timedelta(days=10))
+    def test_customer_cancellation_follows_policy_and_refunds_via_razorpay(self):
+        dep = self.dharamshala()
         r = self._book(dep, 1)
-        self.assertEqual(r.data["refund_quote"]["pct"], 100)    # 10 days before → full refund of package amount
-        r = self.client.post(f"/api/public/bookings/{r.data['code']}/cancel/", {"key": r.data["key"]}, format="json")
+        self.assertEqual(r.data["refund_quote"]["pct"], 100)    # 10 days before -> full refund of package amount
+        with self.captureOnCommitCallbacks(execute=True):
+            r = self.client.post(f"/api/public/bookings/{r.data['code']}/cancel/", {"key": r.data["key"]}, format="json")
         self.assertEqual(r.data["display"], "cancelled")
         self.assertEqual(r.data["refund"], 5499)                  # fee kept
+        self.assertEqual(self.rzp_refunds, [(f"pay_{r.data['code']}", 5499)])
+        self.assertEqual(Refund.objects.get(booking__booking_code=r.data["code"]).gateway_refund_id, "rfnd_1")
         dep.refresh_from_db()
         self.assertEqual(dep.booked_seats, 0)
+
+    def test_webhook_confirms_payment_when_browser_closed(self):
+        r = self._checkout(self.dharamshala(), 1)
+        order_id, pid = r.data["razorpay"]["order_id"], "pay_webhook"
+        self.rzp_payments[pid] = {"id": pid, "order_id": order_id, "amount": r.data["razorpay"]["amount"], "status": "captured",
+                                  "method": "card", "card": {"network": "Visa", "last4": "1111"}}
+        body = json.dumps({"event": "payment.captured", "payload": {"payment": {"entity": {"id": pid, "order_id": order_id}}}}).encode()
+        url = "/api/payments/razorpay/webhook/"
+        self.assertEqual(self.client.generic("POST", url, body, content_type="application/json", HTTP_X_RAZORPAY_SIGNATURE="x").status_code, 400)
+        sig = hmac.new(b"hook-secret", body, hashlib.sha256).hexdigest()
+        self.assertEqual(self.client.generic("POST", url, body, content_type="application/json", HTTP_X_RAZORPAY_SIGNATURE=sig).status_code, 200)
+        b = Booking.objects.get(booking_code=r.data["code"])
+        self.assertEqual(b.status, "confirmed")
+        self.assertEqual(b.payments.get().method_detail, "Visa ending 1111")
+
+    # ---- operator bank details & settlements
+    BANK = {"holder_name": "Himalayan Rides", "account_number": "50100111122223333", "confirm_account_number": "50100111122223333",
+            "ifsc": "hdfc0000001", "account_type": "current", "pan": "abcpt1234k", "business_type": "proprietorship",
+            "address_line": "12 Main Market", "address_city": "Delhi", "address_state": "Delhi", "pincode": "110001"}
+
+    def test_operator_bank_details_are_encrypted_and_masked(self):
+        self.login("himalayan@pakkatrip.com", "operator123")
+        self.assertEqual(self.client.put("/api/operator/bank-account/", {**self.BANK, "confirm_account_number": "1"}, format="json").status_code, 400)
+        self.assertEqual(self.client.put("/api/operator/bank-account/", {**self.BANK, "ifsc": "ABCD0123456"}, format="json").status_code, 400)
+        r = self.client.put("/api/operator/bank-account/", self.BANK, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual((r.data["bank"]["account"], r.data["bank"]["pan"], r.data["bank"]["status"]), ("XXXX XXXX 3333", "XXXXXX234K", "pending"))
+        self.assertNotIn("50100111122223333", json.dumps(r.data, default=str))
+        acct = OperatorBankAccount.objects.get(operator__business_name="Himalayan Rides")
+        self.assertNotIn("50100111122223333", acct.account_number_enc)
+        self.assertEqual((decrypt(acct.account_number_enc), decrypt(acct.pan_enc)), ("50100111122223333", "ABCPT1234K"))
+
+    def test_admin_verifies_bank_and_pays_out_completed_trips(self):
+        op = Operator.objects.get(business_name="Himalayan Rides")
+        due = sum(share for _, share in due_bookings(op))
+        self.assertGreater(due, 0)
+        self.login("admin@pakkatrip.com", "admin123")
+        self.assertEqual(self.client.post("/api/admin/payouts/", {"operator_id": op.id}, format="json").status_code, 400)  # not verified yet
+        r = self.client.post(f"/api/admin/bank-accounts/{op.id}/verify/", format="json")
+        self.assertEqual((r.status_code, r.data["status"], r.data["payouts_ready"]), (200, "verified", True))
+        row = next(o for o in self.client.get("/api/admin/payouts/").data["operators"] if o["id"] == op.id)
+        self.assertEqual(row["due"], due)
+        r = self.client.post("/api/admin/payouts/", {"operator_id": op.id}, format="json")
+        self.assertEqual((r.status_code, r.data["status"]), (201, "processing"), r.data)
+        payout = Payout.objects.get(pk=r.data["id"])
+        self.assertEqual((payout.amount, payout.bookings.count() > 0), (due, True))
+        self.assertEqual(self.rzp_calls[-1][2]["idempotency_key"], payout.idempotency_key)
+        self.assertEqual(self.client.post("/api/admin/payouts/", {"operator_id": op.id}, format="json").status_code, 400)   # nothing left
+        # the bank bounces it: the bookings become due again
+        self.payout_state = {"status": "reversed", "status_details": {"description": "Beneficiary account closed"}}
+        r = self.client.post(f"/api/admin/payouts/{payout.id}/refresh/", format="json")
+        self.assertEqual((r.data["status"], r.data["failure_reason"]), ("reversed", "Beneficiary account closed"))
+        self.assertEqual(sum(share for _, share in due_bookings(op)), due)
+
+    def test_changing_bank_details_pauses_payouts(self):
+        op = Operator.objects.get(business_name="Himalayan Rides")
+        self.login("admin@pakkatrip.com", "admin123")
+        self.client.post(f"/api/admin/bank-accounts/{op.id}/verify/", format="json")
+        self.login("himalayan@pakkatrip.com", "operator123")
+        self.assertEqual(self.client.put("/api/operator/bank-account/", self.BANK, format="json").data["bank"]["status"], "pending")
+        self.login("admin@pakkatrip.com", "admin123")
+        r = self.client.post("/api/admin/payouts/", {"operator_id": op.id}, format="json")
+        self.assertIn("no verified bank account", r.data["detail"])
+
+    def test_route_mode_transfers_on_hold_reverses_and_releases(self):
+        PlatformSetting.put("payout_mode", "route")
+        op = Operator.objects.get(business_name="Himalayan Rides")
+        self.login("admin@pakkatrip.com", "admin123")
+        self.assertTrue(self.client.post(f"/api/admin/bank-accounts/{op.id}/verify/", format="json").data["route_ready"])
+        self.client.credentials()
+        dep = self.dharamshala()
+        with self.captureOnCommitCallbacks(execute=True):
+            kept = self._book(dep, 1).data
+        with self.captureOnCommitCallbacks(execute=True):
+            cancelled = self._book(dep, 1).data
+        t = Transfer.objects.get(booking__booking_code=kept["code"])
+        self.assertEqual((t.status, t.amount, t.gateway_transfer_id.startswith("trf_")), ("on_hold", 5499, True))
+        self.assertFalse(any(b.booking_code == kept["code"] for b, _ in due_bookings(op)))   # settled by Route, not payouts
+        # traveller cancels 10 days out: 100% of the package amount comes back from the operator's transfer, then is refunded
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(f"/api/public/bookings/{cancelled['code']}/cancel/", {"key": cancelled["key"]}, format="json")
+        names = [c[0] for c in self.rzp_calls]
+        self.assertEqual(Transfer.objects.get(booking__booking_code=cancelled["code"]).status, "reversed")
+        self.assertIn("reverse", names)
+        self.assertEqual(self.rzp_refunds[-1], (f"pay_{cancelled['code']}", 5499))
+        # the kept trip runs: its transfer is released to the operator
+        Booking.objects.filter(booking_code=kept["code"]).update(status="completed")
+        self.assertEqual(release_completed_transfers(), 1)
+        self.assertEqual(Transfer.objects.get(booking__booking_code=kept["code"]).status, "released")
 
     def test_traveller_accounts(self):
         r = self.client.post("/api/public/auth/login/", {"email": "himalayan@pakkatrip.com", "password": "operator123"}, format="json")

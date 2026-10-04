@@ -12,7 +12,20 @@ const STEPS = ['Travellers', 'Review', 'Payment', 'Confirmed']
 export const FlowSteps = ({ step }) => (
   <div className="flow-steps">{STEPS.map((t, i) => <div key={t} data-n={i + 1} className={i + 1 < step ? 'done' : i + 1 === step ? 'now' : ''}>{t}</div>)}</div>
 )
-const BANKS = ['State Bank of India', 'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Punjab National Bank', 'Bank of Baroda', 'Kotak Mahindra Bank']
+const holdTime = co => new Date(co.hold_expires_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })
+
+let razorpayScript = null
+function loadRazorpay() {
+  razorpayScript ??= new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve(window.Razorpay)
+    const s = document.createElement('script')
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    s.onload = () => resolve(window.Razorpay)
+    s.onerror = () => { razorpayScript = null; reject(new Error("Couldn't load Razorpay. Check your internet connection and try again.")) }
+    document.body.appendChild(s)
+  })
+  return razorpayScript
+}
 
 export default function Book() {
   const { id } = useParams()
@@ -30,10 +43,11 @@ export default function Book() {
   const [others, setOthers] = useState([])
   const [quote, setQuote] = useState(null)
   const [agree, setAgree] = useState(false)
-  const [method, setMethod] = useState('upi')
-  const [upiApp, setUpiApp] = useState('GPay')
   const [error, setError] = useState('')
+  const [checkout, setCheckout] = useState(null)   // held booking + Razorpay order from the server
   const [paying, setPaying] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [payNote, setPayNote] = useState('')
   const [guestOk, setGuestOk] = useState(false)
 
   useEffect(() => {
@@ -67,27 +81,57 @@ export default function Book() {
     } catch (err) { setError(err.message) }
   }
 
-  async function pay(e) {
-    e.preventDefault()
-    const form = e.currentTarget
-    if (!form.checkValidity()) { form.reportValidity(); return }
-    const fd = Object.fromEntries(new FormData(form))
-    // Only a label is sent for the payment — never card numbers (demo payment, nothing is charged).
-    const detail = method === 'upi' ? (fd.upi?.trim() || upiApp) : method === 'card' ? `ending ${String(fd.cardNo).replace(/\D/g, '').slice(-4)}` : fd.bank
-    setPaying(true)
-    await new Promise(r => setTimeout(r, 1200))   // feels like a payment gateway round-trip
+  function backToStart(message) {
+    setCheckout(null); setPaying(false); setVerifying(false); setPayNote('')
+    setError(message)
+    setStep(1)
+    api(`/public/packages/${id}/`).then(setP).catch(() => {})
+  }
+
+  // Step 1 of payment: hold the seats on the server and get a Razorpay order (reused if the traveller retries).
+  async function pay() {
+    setPayNote(''); setPaying(true)
+    let co = checkout
     try {
-      const b = await api('/public/bookings/', { method: 'POST', body: {
-        departure_id: depId, seats, name: lead.name.trim(), phone: lead.phone.trim(), email: lead.email.trim(),
-        co_travellers: others.slice(0, seats - 1), payment_method: method, payment_detail: detail } })
+      if (!co || new Date(co.hold_expires_at) <= new Date()) {
+        co = await api('/public/bookings/', { method: 'POST', body: {
+          departure_id: depId, seats, name: lead.name.trim(), phone: lead.phone.trim(), email: lead.email.trim(),
+          co_travellers: others.slice(0, seats - 1) } })
+        setCheckout(co)
+      }
+      const Razorpay = await loadRazorpay()
+      const rzp = new Razorpay({
+        key: co.razorpay.key, order_id: co.razorpay.order_id, amount: co.razorpay.amount, currency: co.razorpay.currency,
+        name: co.razorpay.name, description: co.razorpay.description, prefill: co.razorpay.prefill, notes: co.razorpay.notes,
+        theme: { color: '#0B2E59' },
+        handler: resp => verify(co, resp),
+        modal: { ondismiss: () => { setPaying(false); setPayNote(`Payment not completed. Your ${plural(seats, 'seat')} stay on hold until ${holdTime(co)}.`) } },
+      })
+      rzp.on('payment.failed', resp => setPayNote(`${resp.error?.description || 'Payment failed.'} You can try again or use another method.`))
+      rzp.open()
+    } catch (err) {
+      if (co) { setPaying(false); setPayNote(err.message); return }
+      backToStart(`${err.message} No money was charged — please pick another date or fewer seats.`)
+    }
+  }
+
+  // Step 2: Razorpay says it's paid — the server checks the signature with Razorpay before confirming.
+  async function verify(co, resp) {
+    setPaying(false); setVerifying(true)
+    try {
+      const b = await api(`/public/bookings/${co.code}/pay/verify/`, { method: 'POST', body: { key: co.key, ...resp } })
       rememberTicket(b.code, b.key)
       navigate(`/ticket/${b.code}` + qs({ new: 1 }), { replace: true })
     } catch (err) {
-      setPaying(false)
-      setError(`${err.message} No money was charged — please pick another date or fewer seats.`)
-      setStep(1)
-      api(`/public/packages/${id}/`).then(setP).catch(() => {})
+      if (err.status === 409) backToStart(err.message)
+      else { setVerifying(false); setPayNote(err.message) }
     }
+  }
+
+  // Leaving the payment step: give the held seats back right away instead of waiting for the hold to lapse.
+  function leavePayment() {
+    if (checkout) api(`/public/bookings/${checkout.code}/pay/abandon/`, { method: 'POST', body: { key: checkout.key } }).catch(() => {})
+    setCheckout(null); setPayNote(''); setStep(2)
   }
 
   const side = (
@@ -194,39 +238,22 @@ export default function Book() {
   } else {
     main = (
       <>
-        <div className="demo-pay"><PIcon name="info" size={18} /><div><b>Dummy payment.</b> No money is charged. Card details are never sent — only the last 4 digits are kept as a label.</div></div>
-        <form className="card panel" onSubmit={pay} noValidate key={method}>
+        {cfg.payments_test_mode && (
+          <div className="demo-pay"><PIcon name="info" size={18} /><div><b>Razorpay test mode.</b> No real money moves. Pay with UPI ID <b>success@razorpay</b> (or <b>failure@razorpay</b> to see a failed payment), or a Razorpay test card.</div></div>
+        )}
+        <div className="card panel">
           <h2><PIcon name="lock" size={20} /> Pay {inr(quote.total)}</h2>
-          <div className="pay-tabs" role="tablist">
-            {[['upi', 'upi', 'UPI'], ['card', 'card', 'Card'], ['netbanking', 'bank', 'Netbanking']].map(([m, ic, t]) => (
-              <button key={m} type="button" className={`pay-tab ${method === m ? 'sel' : ''}`} role="tab" aria-selected={method === m} onClick={() => setMethod(m)}><PIcon name={ic} size={22} />{t}</button>
-            ))}
+          <p style={{ margin: '0 0 12px' }}>Pay securely with UPI, card, netbanking or wallet on Razorpay. Your {plural(seats, 'seat')} {checkout ? <>are held until <b>{holdTime(checkout)}</b></> : 'will be held for you while you pay'}.</p>
+          <div className="pay-tabs" aria-hidden="true">
+            {[['upi', 'UPI'], ['card', 'Cards'], ['bank', 'Netbanking']].map(([ic, t]) => <div key={t} className="pay-tab"><PIcon name={ic} size={22} />{t}</div>)}
           </div>
-          {method === 'upi' && <>
-            <div className="upi-apps">{['GPay', 'PhonePe', 'Paytm', 'BHIM'].map(a => <button key={a} type="button" className={upiApp === a ? 'sel' : ''} onClick={() => setUpiApp(a)}>{a}</button>)}</div>
-            <label htmlFor="upiId">Or enter UPI ID</label><input id="upiId" name="upi" type="text" placeholder="yourname@okbank" pattern="[a-zA-Z0-9._\-]+@[a-zA-Z]+" title="Like name@okhdfc" />
-            <div className="help">A collect request would be sent to your UPI app. In this demo, nothing is sent.</div>
-          </>}
-          {method === 'card' && <>
-            <div className="form-grid two">
-              <div className="full"><label>Card number</label><input name="cardNo" type="text" inputMode="numeric" placeholder="4111 1111 1111 1111" required pattern="[0-9 ]{15,19}" autoComplete="off" /></div>
-              <div><label>Expiry (MM/YY)</label><input name="exp" type="text" placeholder="12/29" required pattern="(0[1-9]|1[0-2])/[0-9]{2}" autoComplete="off" /></div>
-              <div><label>CVV</label><input name="cvv" type="password" placeholder="123" required pattern="[0-9]{3}" inputMode="numeric" maxLength={3} autoComplete="off" /></div>
-              <div className="full"><label>Name on card</label><input name="cardName" type="text" required autoComplete="off" defaultValue={lead.name} /></div>
-            </div>
-            <div className="help">Demo only: do not enter a real card. Nothing leaves your browser except the last 4 digits.</div>
-          </>}
-          {method === 'netbanking' && <>
-            <label htmlFor="bank">Choose your bank</label>
-            <select id="bank" name="bank" required defaultValue=""><option value="">Select bank…</option>{BANKS.map(b => <option key={b}>{b}</option>)}</select>
-            <div className="help">You would be redirected to your bank's login page. In this demo, nothing is redirected.</div>
-          </>}
+          {payNote && <div className="form-error" role="alert">{payNote}</div>}
           <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-            <button type="button" className="btn btn-lg" onClick={() => setStep(2)} aria-label="Back"><PIcon name="back" size={18} /></button>
-            <button className="btn btn-green btn-lg" style={{ flex: 1 }} type="submit" disabled={paying}><PIcon name="lock" size={18} /> {paying ? 'Processing…' : `Pay ${inr(quote.total)}`}</button>
+            <button type="button" className="btn btn-lg" onClick={leavePayment} disabled={paying} aria-label="Back"><PIcon name="back" size={18} /></button>
+            <button className="btn btn-green btn-lg" style={{ flex: 1 }} type="button" onClick={pay} disabled={paying}><PIcon name="lock" size={18} /> {paying ? 'Opening Razorpay…' : payNote ? `Try again · ${inr(quote.total)}` : `Pay ${inr(quote.total)}`}</button>
           </div>
-          <div className="secure"><PIcon name="shield" size={14} /> 100% secure payments · Refund protection on every booking</div>
-        </form>
+          <div className="secure"><PIcon name="shield" size={14} /> Payments by Razorpay · PakkaTrip never sees your card or bank details</div>
+        </div>
       </>
     )
   }
@@ -238,10 +265,10 @@ export default function Book() {
         <FlowSteps step={step} />
       </div>
       <div className="container flow-layout"><div className="flow-main">{main}</div>{side}</div>
-      {paying && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[rgb(11_24_45/.55)]" role="alertdialog" aria-label="Processing payment">
+      {verifying && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[rgb(11_24_45/.55)]" role="alertdialog" aria-label="Confirming payment">
           <div className="card" style={{ padding: 24, textAlign: 'center', maxWidth: 320 }}>
-            <div className="spinner" /><p style={{ margin: 0 }}><b>Confirming your seats…</b></p><p className="help">Demo payment — please wait a moment.</p></div>
+            <div className="spinner" /><p style={{ margin: 0 }}><b>Confirming your seats…</b></p><p className="help">Checking your payment with Razorpay. Please don't close this page.</p></div>
         </div>
       )}
     </>
