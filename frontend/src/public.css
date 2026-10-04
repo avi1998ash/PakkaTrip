@@ -54,7 +54,10 @@
 .pub .pill.navy {background: var(--navy-soft); color: var(--navy-2);}
 .pub .pill.grey {background: #EEF0F3; color: #555F6D;}
 .pub .pill.solid-red {background: var(--red); color: #fff;}
-.pub .verified {display: inline-flex; align-items: center; gap: 4px; color: var(--green); background: var(--green-soft); font-size: 11.5px; font-weight: 700; padding: 2px 8px 2px 6px; border-radius: 99px; white-space: nowrap;}
+.pub .tier {display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 2px 8px 2px 6px; border-radius: 99px; white-space: nowrap;}
+.pub .tier-gold {color: #8A5A00; background: #FBF0D4;}
+.pub .tier-silver {color: #4A5565; background: #E9EDF2;}
+.pub .tier-bronze {color: #8B4A1C; background: #F6E6D8;}
 .pub .stars {color: var(--saffron); letter-spacing: 1px; white-space: nowrap;}
 .pub .stars .off {color: #D5DAE1;}
 .pub .rating {display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-size: 13px;}

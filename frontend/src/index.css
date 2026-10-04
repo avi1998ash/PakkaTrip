@@ -107,6 +107,9 @@
   .b-amber { background: var(--color-amber-soft); color: var(--color-amber); }
   .b-navy { background: var(--color-navy-soft); color: var(--color-navy-2); }
   .b-grey { background: #EEF0F3; color: #555F6D; }
+  .b-gold { background: #FBF0D4; color: #8A5A00; }
+  .b-silver { background: #E9EDF2; color: #4A5565; }
+  .b-bronze { background: #F6E6D8; color: #8B4A1C; }
   .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: #EEF0F3; color: #555F6D; margin-left: 4px; }
 
   /* seat inventory */

@@ -18,7 +18,15 @@ export function Stars({ rating }) {
   const r = Math.round(rating)
   return <span className="stars" aria-label={`${Number(rating).toFixed(1)} out of 5`}>{'★'.repeat(r)}<span className="off">{'★'.repeat(5 - r)}</span></span>
 }
-export const Verified = () => <span className="verified" title="Bharosa badge: documents and licences checked by PakkaTrip"><PIcon name="shield" size={13} />Verified</span>
+/** Operator verification tier (same rules as the partner portal). */
+export const TIER_INFO = {
+  gold: ['Gold', 'PakkaTrip has checked their GST registration, PAN, bank account and Udyam (MSME) registration.'],
+  silver: ['Silver', "PakkaTrip has checked their PAN, bank account and the owner's Aadhaar."],
+  bronze: ['Bronze', 'PakkaTrip has checked their PAN, bank account and mobile number.'],
+}
+export const TierBadge = ({ tier }) => TIER_INFO[tier]
+  ? <span className={`tier tier-${tier}`} title={`${TIER_INFO[tier][0]} verified: ${TIER_INFO[tier][1]}`}><PIcon name="shield" size={13} />{TIER_INFO[tier][0]} verified</span>
+  : null
 export function RatingChip({ avg, count }) {
   return count
     ? <span className="rating"><span className="box"><PIcon name="star" size={12} />{avg.toFixed(1)}</span><span className="count">({count} {count === 1 ? 'review' : 'reviews'})</span></span>

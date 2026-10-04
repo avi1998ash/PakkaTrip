@@ -38,7 +38,7 @@ export default function Home() {
         <div className="container">
           <div className="sec-head"><div><div className="eyebrow">Bharosa first</div><h2>Why PakkaTrip?</h2><p>Everything WhatsApp booking can't give you.</p></div></div>
           <div className="why-grid">
-            {[['shield', 'var(--green-soft)', 'var(--green)', 'Verified operators', "Every operator's documents and licences are checked before they get the green Bharosa badge."],
+            {[['shield', 'var(--green-soft)', 'var(--green)', 'Verified operators', "Every operator's PAN and bank account are checked before they can list. Their Gold, Silver or Bronze badge shows what else we verified."],
               ['ticket', 'var(--saffron-soft)', 'var(--saffron-dark)', 'Pakka booking', 'Your seat is confirmed the moment you pay. E-ticket with a booking ID — no "seat hai na?" follow-ups.'],
               ['refund', 'var(--navy-soft)', 'var(--navy-2)', 'Refund protection', 'Clear cancellation rules shown before you pay, and full refunds if the operator cancels.'],
               ['rupee', 'var(--amber-soft)', 'var(--amber)', 'Compare & save', 'Same route, many operators — compare price, ratings and inclusions side by side.']].map(([ic, bg, fg, t, x]) => (

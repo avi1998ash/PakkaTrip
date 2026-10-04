@@ -89,7 +89,7 @@ def card_out(p, best, popularity):
     return {
         "id": p.id, "title": p.title, "from_city": p.from_city.name, "to_city": p.to_city.name, "nights": p.nights,
         "price": p.price_per_person, "cover_url": cover_url(p), "operator": p.operator.business_name,
-        "verified": p.operator.is_verified, "rating": float(p.rating_avg), "reviews": p.rating_count,
+        "verified": p.operator.is_verified, "tier": p.operator.tier or None, "rating": float(p.rating_avg), "reviews": p.rating_count,
         "inc": inclusion_keys(fac), "popularity": popularity,
         "best": {"id": best.id, "date": best.departure_date, **seat_stats(best)} if best else None,
     }
@@ -240,7 +240,8 @@ def package_detail(request, pk):
         "nights": p.nights, "price": p.price_per_person, "pickup_point": p.pickup_point,
         "rating": float(p.rating_avg), "reviews_count": p.rating_count,
         "images": images_out(p), "facilities": fac, "inc": inclusion_keys(fac), "itinerary": itinerary, "exclusions": DEFAULT_EXCLUSIONS,
-        "operator": {"name": op.business_name, "city": op.city.name, "verified": op.is_verified, "joined": localtime(op.created_at).date(),
+        "operator": {"name": op.business_name, "city": op.city.name, "verified": op.is_verified, "tier": op.tier or None,
+                     "joined": localtime(op.created_at).date(),
                      "rating": float(op.rating_avg), "reviews": op.rating_count,
                      "live_packages": op.packages.filter(status=Package.Status.APPROVED).count(),
                      "trips_run": op.trips_run_offline + Departure.objects.filter(package__operator=op, departure_date__lt=today).count()},

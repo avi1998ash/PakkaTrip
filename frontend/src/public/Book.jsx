@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth'
 import { durationLabel, fmtDate, fmtDay, inr, plural } from '../lib/format'
 import { ErrorBox, Spinner } from './parts'
 import { PolicyTable } from './PublicLayout'
-import { Bar, CoverImg, MAX_SEATS, PIcon, qs, rememberTicket, SeatPill, seatText, Verified } from './shared'
+import { Bar, CoverImg, MAX_SEATS, PIcon, qs, rememberTicket, SeatPill, seatText, TierBadge } from './shared'
 import { feeFor } from './Trip'
 
 const STEPS = ['Travellers', 'Review', 'Payment', 'Confirmed']
@@ -137,7 +137,7 @@ export default function Book() {
   const side = (
     <aside className="flow-side"><div className="card panel">
       <div className="summary-row"><div className="cover"><CoverImg url={cover?.url} /></div>
-        <div><b>{p.title}</b><div className="help" style={{ margin: '2px 0 0' }}>{p.operator.name} {p.operator.verified && <Verified />}</div></div></div>
+        <div><b>{p.title}</b><div className="help" style={{ margin: '2px 0 0' }}>{p.operator.name} <TierBadge tier={p.operator.tier} /></div></div></div>
       <dl className="kv"><dt>Route</dt><dd>{p.from_city} → {p.to_city}</dd><dt>Departure</dt><dd>{dep ? fmtDay(dep.date) : '—'}</dd>
         <dt>Duration</dt><dd>{durationLabel(p.nights)}</dd><dt>Seats</dt><dd>{seats}</dd></dl>
       <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>

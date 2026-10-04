@@ -31,8 +31,8 @@ export default function AdminDashboard() {
           {d.unverified_operators > 0 && (
             <div className="card flex items-center gap-3.5 px-[18px] py-4">
               <div className="stat-icon bg-amber-soft text-amber"><Icon name="alert" size={20} /></div>
-              <div className="flex-1"><b className="font-display text-xl">{d.unverified_operators}</b> {d.unverified_operators > 1 ? 'operators' : 'operator'} not yet verified</div>
-              <Link className="btn btn-sm" to="/admin/operators?f=unverified">Verify</Link>
+              <div className="flex-1"><b className="font-display text-xl">{d.unverified_operators}</b> {d.unverified_operators > 1 ? 'operator applications' : 'operator application'} waiting for review</div>
+              <Link className="btn btn-sm" to="/admin/applications">Review</Link>
             </div>
           )}
         </div>

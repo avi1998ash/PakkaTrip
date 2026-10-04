@@ -28,7 +28,7 @@ from operators.models import Operator
 TEST_MEDIA = tempfile.mkdtemp(prefix="pakkatrip-test-media-")
 
 
-@override_settings(MEDIA_ROOT=TEST_MEDIA,   # never touch real uploads (seed() wipes the media folder)
+@override_settings(MEDIA_ROOT=TEST_MEDIA, PRIVATE_MEDIA_ROOT=f"{TEST_MEDIA}/private",   # never touch real uploads (seed() wipes them)
                    RAZORPAY_KEY_ID="rzp_test_unit", RAZORPAY_KEY_SECRET="unit-secret", RAZORPAY_WEBHOOK_SECRET="hook-secret",
                    RAZORPAYX_ACCOUNT_NUMBER="2323230000000000")
 class PortalTests(APITestCase):

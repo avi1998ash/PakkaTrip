@@ -24,6 +24,7 @@ from bookings.models import Booking
 from core.crypto import decrypt, encrypt
 from core.models import PlatformSetting, audit
 from operators.models import Operator, OperatorBankAccount
+from operators.verification import refresh_tier
 
 from . import razorpay
 from .models import Payment, Payout, Transfer
@@ -60,6 +61,7 @@ def save_bank_account(operator, d, user=None):
     acct.status, acct.rejection_reason, acct.verified_at, acct.verified_by = OperatorBankAccount.Status.PENDING, "", None, None
     acct.razorpayx_fund_account_id = ""   # a new fund account is made for the new details on verification
     acct.save()
+    refresh_tier(operator)
     audit(user, "bank_account.saved", acct, last4=acct.account_last4, ifsc=ifsc)
     return acct
 
@@ -89,6 +91,7 @@ def verify_bank_account(acct, user=None):
         raise PayoutError(f"Razorpay didn't accept these bank details: {e}")
     acct.status, acct.rejection_reason, acct.verified_at, acct.verified_by = OperatorBankAccount.Status.VERIFIED, "", timezone.now(), user
     acct.save()
+    refresh_tier(op)
     audit(user, "bank_account.verified", acct, mode=payout_mode())
     return acct
 
@@ -96,6 +99,7 @@ def verify_bank_account(acct, user=None):
 def reject_bank_account(acct, reason, user=None):
     acct.status, acct.rejection_reason = OperatorBankAccount.Status.REJECTED, reason[:200]
     acct.save(update_fields=["status", "rejection_reason", "updated_at"])
+    refresh_tier(acct.operator)
     audit(user, "bank_account.rejected", acct, reason=reason)
     return acct
 
