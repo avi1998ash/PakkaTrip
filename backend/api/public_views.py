@@ -265,7 +265,7 @@ def config(request):
     pkgs = live_packages().values_list("from_city__name", "to_city__name")
     return Response({"fee_rate": s["fee_rate_pct"], "fee_min": s["fee_min_inr"], "policy": policy_out(),
                      "payments_test_mode": settings.RAZORPAY_KEY_ID.startswith("rzp_test_"),
-                     "sms_otp_enabled": s["sms_otp_enabled"], "site": settings.SITE_INFO,
+                     "sms_otp_enabled": s["sms_otp_enabled"], "email_otp_enabled": s["email_otp_enabled"], "site": settings.SITE_INFO,
                      "cities": {"from": sorted({f for f, _ in pkgs}), "to": sorted({t for _, t in pkgs})}})
 
 

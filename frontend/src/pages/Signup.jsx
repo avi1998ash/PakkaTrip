@@ -5,15 +5,19 @@ import { api } from '../lib/api'
 import { homeFor, isPortalUser, useAuth } from '../lib/auth'
 import { useApi } from '../lib/useApi'
 
-/** Tour operators apply here, then they're signed straight in. The mobile number is confirmed by SMS code when
- *  that's switched on (Admin → Settings); otherwise PakkaTrip confirms it by calling. */
+/** Tour operators apply here, then they're signed straight in. Each switch in Admin → Settings adds a code step:
+ *  email code (confirms the login email) and SMS code (confirms the mobile; otherwise PakkaTrip confirms it by calling). */
 export default function Signup() {
   const { user, adopt } = useAuth()
   const { data: cfg } = useApi('/public/config/')
   const otpOn = !!cfg?.sms_otp_enabled
-  const [f, setF] = useState({ business_name: '', owner_name: '', city: '', phone: '', email: '', password: '', otp: '' })
+  const emailOn = !!cfg?.email_otp_enabled
+  const [f, setF] = useState({ business_name: '', owner_name: '', city: '', phone: '', email: '', password: '', otp: '', email_otp: '' })
   const [sentTo, setSentTo] = useState('')
   const [devCode, setDevCode] = useState('')
+  const [mailedTo, setMailedTo] = useState('')
+  const [mailDevCode, setMailDevCode] = useState('')
+  const mailed = !!mailedTo && mailedTo === f.email.trim().toLowerCase()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   const [signedUp, setSignedUp] = useState(false)
@@ -31,15 +35,28 @@ export default function Signup() {
     } catch (err) { setError(err.message) } finally { setBusy('') }
   }
 
+  async function sendEmailCode() {
+    const email = f.email.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setError('Enter your email address first.'); return }
+    setBusy('email'); setError('')
+    try {
+      const d = await api('/public/partner/email-otp/', { method: 'POST', body: { email } })
+      setMailedTo(email); setMailDevCode(d.dev_code || '')
+    } catch (err) { setError(err.message) } finally { setBusy('') }
+  }
+
   async function submit(e) {
     e.preventDefault()
     const form = e.currentTarget
     if (!form.checkValidity()) { form.reportValidity(); return }
+    if (emailOn && !mailed) { setError('Verify your email: tap “Email me a code” and enter the code we send you.'); return }
     if (otpOn && sentTo !== f.phone) { setError('Verify your mobile number: tap “Send code” and enter the code from the SMS.'); return }
     setBusy('signup'); setError('')
     try {
-      const { otp, ...rest } = f
-      const d = await api('/public/partner/signup/', { method: 'POST', body: otpOn ? f : rest })
+      const { otp, email_otp, ...body } = f
+      if (otpOn) body.otp = otp
+      if (emailOn) body.email_otp = email_otp
+      const d = await api('/public/partner/signup/', { method: 'POST', body })
       setSignedUp(true)
       adopt(d)
     } catch (err) { setError(err.message) } finally { setBusy('') }
@@ -77,7 +94,18 @@ export default function Signup() {
                   onChange={e => set('otp', e.target.value.replace(/\D/g, ''))} /></div>
             )}
             <div className="full"><label htmlFor="email">Email (you'll sign in with this)</label>
-              <input id="email" type="email" required autoComplete="username" value={f.email} onChange={e => set('email', e.target.value)} /></div>
+              <div className="flex gap-2">
+                <input id="email" type="email" required autoComplete="username" value={f.email} onChange={e => set('email', e.target.value)} />
+                {emailOn && <button className="btn flex-none" type="button" onClick={sendEmailCode} disabled={busy === 'email'}>
+                  {busy === 'email' ? 'Sending…' : mailed ? 'Resend code' : 'Email me a code'}</button>}
+              </div>
+              {emailOn && mailed && <div className="help" style={{ color: 'var(--color-leaf)' }}><Icon name="check" size={13} /> Code sent to {mailedTo}. Check your spam folder if it isn't in your inbox.</div>}
+              {mailDevCode && <div className="help">Development mode (no email sent): your code is <b>{mailDevCode}</b></div>}</div>
+            {emailOn && mailed && (
+              <div className="full"><label htmlFor="email_otp">6-digit code from the email</label>
+                <input id="email_otp" required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={f.email_otp}
+                  onChange={e => set('email_otp', e.target.value.replace(/\D/g, ''))} /></div>
+            )}
             <div className="full"><label htmlFor="password">Password</label>
               <input id="password" type="password" required minLength={8} maxLength={64} autoComplete="new-password" value={f.password} onChange={e => set('password', e.target.value)} />
               <div className="help">At least 8 characters.</div></div>

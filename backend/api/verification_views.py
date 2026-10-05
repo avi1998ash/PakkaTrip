@@ -19,10 +19,10 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import User
 from catalog.models import City, unique_slug
-from core import sms
+from core import mailer, sms
 from core.models import audit
-from operators.models import Operator, OperatorDocument, OperatorMember, PhoneOtp
-from operators.verification import (VerificationError, check_otp, mark_phone_verified, read_document_file, review_document, send_otp,
+from operators.models import EmailOtp, Operator, OperatorDocument, OperatorMember, PhoneOtp
+from operators.verification import (VerificationError, check_otp, mark_phone_verified, read_document_file, review_document, send_email_otp, send_otp,
                                     submit_document, verification_out)
 
 from .admin_views import err
@@ -32,6 +32,7 @@ from .public_views import PUBLIC, SensitiveThrottle
 from .serializers import ADMIN_EMAIL, validate_phone
 
 Purpose = PhoneOtp.Purpose
+EmailPurpose = EmailOtp.Purpose
 SMS_OFF = "SMS codes are switched off for now. PakkaTrip will call you to confirm your mobile number."
 
 
@@ -64,6 +65,28 @@ def signup_otp(request):
         return err(str(e))
 
 
+def email_taken(email):
+    return email == ADMIN_EMAIL or User.objects.filter(email=email).exists()
+
+
+@api_view(["POST"])
+@permission_classes(PUBLIC)
+@throttle_classes([SensitiveThrottle])
+def signup_email_otp(request):
+    if not mailer.otp_on():
+        return err("Email codes are switched off. You can sign up without one.")
+    try:
+        email = serializers.EmailField().run_validation(str(request.data.get("email", "")).strip().lower())
+    except serializers.ValidationError:
+        return err("Enter a valid email address.")
+    if email_taken(email):
+        return err("An account with this email already exists. Sign in on the Partner portal instead.")
+    try:
+        return _otp_response(send_email_otp(email, EmailPurpose.PARTNER_SIGNUP))
+    except VerificationError as e:
+        return err(str(e))
+
+
 class PartnerSignupIn(serializers.Serializer):
     business_name = serializers.CharField(min_length=3, max_length=120)
     owner_name = serializers.RegexField(r"^[A-Za-z][A-Za-z .'-]{1,99}$", error_messages={"invalid": "Enter the owner's full name."})
@@ -71,11 +94,12 @@ class PartnerSignupIn(serializers.Serializer):
     phone = serializers.CharField(validators=[validate_phone])
     otp = serializers.RegexField(r"^\d{6}$", required=False, error_messages={"invalid": "Enter the 6-digit code we sent by SMS."})
     email = serializers.EmailField()
+    email_otp = serializers.RegexField(r"^\d{6}$", required=False, error_messages={"invalid": "Enter the 6-digit code we emailed you."})
     password = serializers.CharField(min_length=8, max_length=64)
 
     def validate_email(self, v):
         v = v.strip().lower()
-        if v == ADMIN_EMAIL or User.objects.filter(email=v).exists():
+        if email_taken(v):
             raise serializers.ValidationError("An account with this email already exists. Sign in instead.")
         return v
 
@@ -95,7 +119,12 @@ def signup(request):
     ser = PartnerSignupIn(data=request.data)
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
-    otp_on = sms.otp_on()
+    otp_on, email_on = sms.otp_on(), mailer.otp_on()
+    if email_on:
+        try:
+            check_otp(d["email"], EmailPurpose.PARTNER_SIGNUP, d.get("email_otp"), channel="email")
+        except VerificationError as e:
+            return Response({"email_otp": [str(e)]}, status=400)
     if otp_on:
         try:
             check_otp(d["phone"], Purpose.PARTNER_SIGNUP, d.get("otp"))
@@ -104,7 +133,8 @@ def signup(request):
     name, owner = " ".join(d["business_name"].split()), " ".join(d["owner_name"].split())
     with transaction.atomic():
         user = User.objects.create_user(d["email"], d["password"], full_name=owner, phone=d["phone"], role=User.Role.OPERATOR,
-                                        phone_verified_at=timezone.now() if otp_on else None)
+                                        phone_verified_at=timezone.now() if otp_on else None,
+                                        email_verified_at=timezone.now() if email_on else None)
         op = Operator.objects.create(
             business_name=name, slug=unique_slug(Operator, name), owner_name=owner, contact_phone=d["phone"], contact_email=d["email"],
             city=City.by_name(d["city"]), status=Operator.Status.PENDING, source=Operator.Source.SIGNUP)

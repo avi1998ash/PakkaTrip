@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
+from django.core import mail
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -283,3 +284,56 @@ class SmsOffTests(APITestCase):
             r = self.client.put("/api/admin/settings/", body, format="json")
         self.assertEqual((r.status_code, r.data["sms_otp_enabled"]), (200, True))
         self.assertTrue(self.client.get("/api/public/config/").data["sms_otp_enabled"])
+
+
+@override_settings(PRIVATE_MEDIA_ROOT=TEST_PRIVATE, MSG91_AUTH_KEY="", MSG91_OTP_TEMPLATE_ID="", DEBUG=False,
+                   EMAIL_HOST_USER="pakkatrip@gmail.com", EMAIL_HOST_PASSWORD="apppassword")
+class EmailOtpTests(APITestCase):
+    """Email codes on, SMS codes off: the launch setup. Tests use Django's in-memory mailbox."""
+
+    @classmethod
+    def setUpTestData(cls):
+        User.objects.create_superuser("admin@pakkatrip.com", "admin123")
+
+    def setUp(self):
+        cache.clear()
+        PlatformSetting.put("email_otp_enabled", True)
+
+    def code(self):
+        return mail.outbox[-1].subject.split()[0]
+
+    def test_signup_needs_the_email_code(self):
+        self.assertTrue(self.client.get("/api/public/config/").data["email_otp_enabled"])
+        r = self.client.post("/api/public/partner/email-otp/", {"email": " Spiti@Example.com "}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertNotIn("dev_code", r.data)
+        self.assertEqual((len(mail.outbox), mail.outbox[0].to), (1, ["spiti@example.com"]))
+        self.assertIn(self.code(), mail.outbox[0].body)
+        self.assertEqual(self.client.post("/api/public/partner/signup/", SIGNUP, format="json").status_code, 400)   # no code
+        wrong = "000000" if self.code() != "000000" else "111111"
+        r = self.client.post("/api/public/partner/signup/", {**SIGNUP, "email_otp": wrong}, format="json")
+        self.assertEqual((r.status_code, "email_otp" in r.data), (400, True))
+        r = self.client.post("/api/public/partner/signup/", {**SIGNUP, "email_otp": self.code()}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        user = User.objects.get(email=SIGNUP["email"])
+        self.assertIsNotNone(user.email_verified_at)
+        self.assertIsNone(user.phone_verified_at)   # SMS is off: the admin confirms the mobile by calling
+        # the address is now taken
+        r = self.client.post("/api/public/partner/email-otp/", {"email": SIGNUP["email"]}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_bad_address_and_switched_off(self):
+        self.assertEqual(self.client.post("/api/public/partner/email-otp/", {"email": "not-an-email"}, format="json").status_code, 400)
+        PlatformSetting.put("email_otp_enabled", False)
+        self.assertEqual(self.client.post("/api/public/partner/email-otp/", {"email": "a@b.com"}, format="json").status_code, 400)
+        self.assertEqual(self.client.post("/api/public/partner/signup/", SIGNUP, format="json").status_code, 201)
+        self.assertEqual(mail.outbox, [])
+
+    def test_admin_switch_needs_the_gmail_login(self):
+        r = self.client.post("/api/auth/login/", {"email": "admin@pakkatrip.com", "password": "admin123"}, format="json")
+        self.client.credentials(HTTP_AUTHORIZATION="Bearer " + r.data["access"])
+        body = {"fee_rate": 2.5, "fee_min": 49, "require_verified": True, "email_otp_enabled": True}
+        with override_settings(EMAIL_HOST_USER="", EMAIL_HOST_PASSWORD=""):
+            self.assertEqual(self.client.put("/api/admin/settings/", body, format="json").status_code, 400)
+        r = self.client.put("/api/admin/settings/", body, format="json")
+        self.assertEqual((r.status_code, r.data["email_otp_enabled"], r.data["sms_otp_enabled"]), (200, True, False))
