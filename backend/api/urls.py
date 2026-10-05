@@ -67,6 +67,7 @@ urlpatterns = [
     path("public/auth/signup/", pub.signup),
     path("public/auth/login/", pub.login),
     path("public/partner/otp/", ver.signup_otp),
+    path("public/partner/email-otp/", ver.signup_email_otp),
     path("public/partner/signup/", ver.signup),
     path("public/home/", pub.home),
     path("public/config/", pub.config),

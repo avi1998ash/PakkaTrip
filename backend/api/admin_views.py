@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from bookings.models import Booking
 from bookings.services import SeatError, cancel_booking
 from catalog.models import Package
-from core import sms
+from core import mailer, sms
 from core.demo_seed import seed
 from core.models import PlatformSetting, audit
 from operators.models import Operator, OperatorBankAccount, OperatorDocument
@@ -247,16 +247,20 @@ def platform_settings(request):
         d = ser.validated_data
         if d.get("sms_otp_enabled") and not sms.enabled() and not settings.DEBUG:
             return err("Add MSG91_AUTH_KEY and MSG91_OTP_TEMPLATE_ID to the server settings before turning on SMS codes.")
+        if d.get("email_otp_enabled") and not mailer.enabled() and not settings.DEBUG:
+            return err("Add EMAIL_HOST_USER and EMAIL_HOST_PASSWORD (a Gmail App Password) to the server settings before turning on email codes.")
         PlatformSetting.put("fee_rate_pct", float(d["fee_rate"]), request.user)
         PlatformSetting.put("fee_min_inr", d["fee_min"], request.user)
         PlatformSetting.put("require_verified_operator", d["require_verified"], request.user)
         if "payout_mode" in d:
             PlatformSetting.put("payout_mode", d["payout_mode"], request.user)
-        if "sms_otp_enabled" in d:
-            PlatformSetting.put("sms_otp_enabled", d["sms_otp_enabled"], request.user)
+        for key in ("sms_otp_enabled", "email_otp_enabled"):
+            if key in d:
+                PlatformSetting.put(key, d[key], request.user)
     s = PlatformSetting.get_all()
     return Response({"fee_rate": s["fee_rate_pct"], "fee_min": s["fee_min_inr"], "require_verified": s["require_verified_operator"],
                      "payout_mode": s["payout_mode"], "sms_otp_enabled": s["sms_otp_enabled"], "sms_configured": sms.enabled(),
+                     "email_otp_enabled": s["email_otp_enabled"], "email_configured": mailer.enabled(),
                      "can_reset": settings.DEBUG})
 
 

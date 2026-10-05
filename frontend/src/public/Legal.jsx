@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { inr } from '../lib/format'
+import { inr, telHref } from '../lib/format'
 import { useApi } from '../lib/useApi'
 import { PolicyTable } from './PublicLayout'
 
@@ -40,6 +40,7 @@ function GrievanceBlock({ site }) {
     <dl className="legal-dl">
       <dt>Grievance Officer</dt><dd><Val v={site?.grievance_officer} name="GRIEVANCE_OFFICER_NAME" /></dd>
       <dt>Email</dt><dd>{site?.grievance_email ? <a href={`mailto:${site.grievance_email}`}>{site.grievance_email}</a> : <Val name="GRIEVANCE_OFFICER_EMAIL" />}</dd>
+      {site?.grievance_phone && <><dt>Phone</dt><dd><a href={telHref(site.grievance_phone)}>{site.grievance_phone}</a></dd></>}
       <dt>Address</dt><dd><Val v={site?.address} name="BUSINESS_ADDRESS" /></dd>
     </dl>
   )
@@ -148,6 +149,7 @@ export function Privacy() {
         <li>The <b>operator of the trip you book</b> gets the traveller names and the lead traveller's mobile number, for pickup and
           on-trip coordination.</li>
         <li><b>Razorpay</b>, to take payments, refund them and pay operators.</li>
+        <li><b>Google (Gmail)</b>, which delivers our emails, including one-time codes.</li>
         <li>An <b>SMS provider</b> (MSG91), only to send one-time codes, when SMS codes are switched on.</li>
         <li><b>Government authorities</b>, when the law requires it.</li>
       </ul>
@@ -213,7 +215,7 @@ export function Contact() {
       <p>Questions about a booking, a refund or listing your trips? Reach us here. Keep your booking code handy.</p>
       <dl className="legal-dl">
         <dt>Email</dt><dd>{site?.support_email ? <a href={`mailto:${site.support_email}`}>{site.support_email}</a> : <Val name="SUPPORT_EMAIL" />}</dd>
-        <dt>Phone</dt><dd>{site?.support_phone ? <a href={`tel:${site.support_phone.replace(/\s/g, '')}`}>{site.support_phone}</a> : <Val name="SUPPORT_PHONE" />}</dd>
+        <dt>Phone</dt><dd>{site?.support_phone ? <a href={telHref(site.support_phone)}>{site.support_phone}</a> : <Val name="SUPPORT_PHONE" />}</dd>
         <dt>Hours</dt><dd>{site?.support_hours}</dd>
         <dt>Business</dt><dd><Val v={site?.legal_name} name="BUSINESS_LEGAL_NAME" />{site?.legal_name && site.legal_name !== brand && ` (operating ${brand})`}</dd>
         <dt>Address</dt><dd><Val v={site?.address} name="BUSINESS_ADDRESS" /></dd>

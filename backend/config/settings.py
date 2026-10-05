@@ -31,6 +31,7 @@ SITE_INFO = {
     "support_hours": os.environ.get("SUPPORT_HOURS", "Monday to Saturday, 10 am to 7 pm IST"),
     "grievance_officer": os.environ.get("GRIEVANCE_OFFICER_NAME", ""),
     "grievance_email": os.environ.get("GRIEVANCE_OFFICER_EMAIL", ""),
+    "grievance_phone": os.environ.get("GRIEVANCE_OFFICER_PHONE", ""),
     "jurisdiction": os.environ.get("LEGAL_JURISDICTION_CITY", ""),
 }
 
@@ -108,6 +109,18 @@ PRIVATE_MEDIA_ROOT = BASE_DIR / "private_media"   # encrypted operator ID docume
 MSG91_AUTH_KEY = os.environ.get("MSG91_AUTH_KEY", "")
 MSG91_OTP_TEMPLATE_ID = os.environ.get("MSG91_OTP_TEMPLATE_ID", "")
 OTP_TTL_MINUTES = 10
+
+# Email (one-time codes). Gmail: EMAIL_HOST_USER is the Gmail address and EMAIL_HOST_PASSWORD a 16-character App Password
+# (Google Account → Security → 2-Step Verification → App passwords). Without a login, development prints emails to the log.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "").replace(" ", "")   # Google shows it in groups of 4
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True") == "True"
+EMAIL_TIMEOUT = 15
+EMAIL_BACKEND = ("django.core.mail.backends.smtp.EmailBackend" if EMAIL_HOST_USER
+                 else "django.core.mail.backends.console.EmailBackend")
+DEFAULT_FROM_EMAIL = f"{SITE_INFO['brand']} <{EMAIL_HOST_USER or 'noreply@localhost'}>"
 
 # Razorpay (test keys start with rzp_test_). The webhook secret is the one you set on the Razorpay dashboard.
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")

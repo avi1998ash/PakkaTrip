@@ -192,3 +192,21 @@ class PhoneOtp(models.Model):
 
     class Meta:
         db_table = "phone_otps"
+
+
+class EmailOtp(models.Model):
+    """A one-time code sent by email. Only a hash of the code is stored."""
+
+    class Purpose(models.TextChoices):
+        PARTNER_SIGNUP = "partner_signup"
+
+    email = models.EmailField(db_index=True)
+    purpose = models.CharField(max_length=20, choices=Purpose.choices)
+    code_hash = models.CharField(max_length=64)
+    attempts = models.PositiveSmallIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "email_otps"

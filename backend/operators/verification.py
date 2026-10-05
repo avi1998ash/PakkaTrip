@@ -25,9 +25,11 @@ from PIL import Image, UnidentifiedImageError
 
 from core.crypto import decrypt, decrypt_bytes, encrypt_bytes
 from core.models import audit
+from core import mailer
+from core.mailer import MailError, send_otp_email
 from core.sms import SmsError, can_show_code, otp_on, send_otp_sms
 
-from .models import Operator, OperatorBankAccount, OperatorDocument, PhoneOtp
+from .models import EmailOtp, Operator, OperatorBankAccount, OperatorDocument, PhoneOtp
 
 Kind = OperatorDocument.Kind
 TIER_RULES = [  # (tier, checks needed), best first
@@ -199,19 +201,29 @@ def _otp_hash(phone, purpose, code):
     return hmac.new(settings.SECRET_KEY.encode(), f"{phone}:{purpose}:{code}".encode(), hashlib.sha256).hexdigest()
 
 
-def send_otp(phone, purpose):
-    """Text a 6-digit code. Returns the code only in development without MSG91 keys, otherwise None."""
+# (model, field holding the number/address, what to call it, where the code went) for each channel
+CHANNELS = {"sms": (PhoneOtp, "phone", "number", "SMS"), "email": (EmailOtp, "email", "email address", "email")}
+
+
+def _issue(channel, target, purpose):
+    model, field, noun, _ = CHANNELS[channel]
     now = timezone.now()
-    recent = PhoneOtp.objects.filter(phone=phone, created_at__gte=now - timedelta(hours=1))
+    recent = model.objects.filter(**{field: target}, created_at__gte=now - timedelta(hours=1))
     last = recent.order_by("-created_at").first()
     if last and (now - last.created_at).total_seconds() < OTP_RESEND_SECONDS:
         wait = OTP_RESEND_SECONDS - int((now - last.created_at).total_seconds())
         raise VerificationError(f"Please wait {wait} seconds before asking for another code.")
     if recent.count() >= OTP_MAX_PER_HOUR:
-        raise VerificationError("Too many codes requested for this number. Try again in an hour.")
+        raise VerificationError(f"Too many codes requested for this {noun}. Try again in an hour.")
     code = f"{secrets.randbelow(10 ** 6):06d}"
-    PhoneOtp.objects.create(phone=phone, purpose=purpose, code_hash=_otp_hash(phone, purpose, code),
-                            expires_at=now + timedelta(minutes=settings.OTP_TTL_MINUTES))
+    model.objects.create(**{field: target}, purpose=purpose, code_hash=_otp_hash(target, purpose, code),
+                         expires_at=now + timedelta(minutes=settings.OTP_TTL_MINUTES))
+    return code
+
+
+def send_otp(phone, purpose):
+    """Text a 6-digit code. Returns the code only in development without MSG91 keys, otherwise None."""
+    code = _issue("sms", phone, purpose)
     try:
         send_otp_sms(phone, code)
     except SmsError as e:
@@ -219,10 +231,21 @@ def send_otp(phone, purpose):
     return code if can_show_code() else None
 
 
-def check_otp(phone, purpose, code):
+def send_email_otp(email, purpose):
+    """Email a 6-digit code. Returns the code only in development without an SMTP login, otherwise None."""
+    code = _issue("email", email, purpose)
+    try:
+        send_otp_email(email, code)
+    except MailError as e:
+        raise VerificationError(str(e))
+    return code if mailer.can_show_code() else None
+
+
+def check_otp(phone, purpose, code, channel="sms"):
+    model, field, _, sent_by = CHANNELS[channel]
     # The error is raised only after the transaction commits, so a wrong try is always counted.
     with transaction.atomic():
-        otp = (PhoneOtp.objects.select_for_update().filter(phone=phone, purpose=purpose, used_at__isnull=True, expires_at__gt=timezone.now())
+        otp = (model.objects.select_for_update().filter(**{field: phone}, purpose=purpose, used_at__isnull=True, expires_at__gt=timezone.now())
                .order_by("-created_at").first())
         if not otp:
             problem = "That code has expired. Ask for a new one."
@@ -231,7 +254,7 @@ def check_otp(phone, purpose, code):
         elif not hmac.compare_digest(otp.code_hash, _otp_hash(phone, purpose, str(code or "").strip())):
             otp.attempts += 1
             otp.save(update_fields=["attempts"])
-            problem = "That code is wrong. Check the SMS and try again."
+            problem = f"That code is wrong. Check the {sent_by} and try again."
         else:
             otp.used_at = timezone.now()
             otp.save(update_fields=["used_at"])
