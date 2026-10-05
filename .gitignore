@@ -10,3 +10,4 @@ backend/media/
 *.log
 .DS_Store
 ~$*
+backend/private_media/

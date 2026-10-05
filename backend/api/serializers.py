@@ -10,6 +10,7 @@ from bookings.models import Booking
 from bookings.services import seat_stats
 from catalog.models import City, Package, unique_slug
 from operators.models import Operator, OperatorMember
+from operators.verification import refresh_tier
 
 PHONE_RE = re.compile(r"^[6-9]\d{9}$")
 ADMIN_EMAIL = "admin@pakkatrip.com"
@@ -37,6 +38,7 @@ def operator_out(op):
     return {
         "id": op.id, "name": op.business_name, "owner": op.owner_name, "city": op.city.name, "phone": op.contact_phone,
         "email": owner.email if owner else op.contact_email, "verified": op.is_verified, "status": op.status,
+        "tier": op.tier or None, "source": op.source, "rejection_reason": op.rejection_reason, "phone_verified": bool(op.phone_verified_at),
         "joined": localtime(op.created_at).date(), "packages": getattr(op, "n_packages", None),
         "rating": float(op.rating_avg), "reviews": op.rating_count,
     }
@@ -48,7 +50,7 @@ def package_out(p):
     return {
         "cover_url": cover.image.url if cover else None, "image_count": len(imgs),
         "id": p.id, "title": p.title, "operator_id": p.operator_id, "operator_name": p.operator.business_name,
-        "operator_verified": p.operator.is_verified, "from_city": p.from_city.name, "to_city": p.to_city.name,
+        "operator_verified": p.operator.is_verified, "operator_tier": p.operator.tier or None, "from_city": p.from_city.name, "to_city": p.to_city.name,
         "nights": p.nights, "price": p.price_per_person, "default_seats": p.default_seats,
         "status": UI_PKG_STATUS[p.status], "raw_status": p.status, "upcoming_departures": getattr(p, "n_upcoming", None),
         "rating": float(p.rating_avg), "reviews": p.rating_count,
@@ -104,7 +106,6 @@ class OperatorIn(serializers.Serializer):
     phone = serializers.CharField(validators=[validate_phone])
     email = serializers.EmailField()
     password = serializers.CharField(min_length=6, max_length=40, required=False, allow_blank=True)
-    verified = serializers.BooleanField(default=False)
 
     def validate_email(self, value):
         value = value.strip().lower()
@@ -126,17 +127,19 @@ class OperatorIn(serializers.Serializer):
         op = Operator.objects.create(
             business_name=data["name"], slug=unique_slug(Operator, data["name"]), owner_name=data["owner"],
             contact_phone=data["phone"], contact_email=data["email"], city=City.by_name(data["city"]),
-            status=Operator.Status.VERIFIED if data["verified"] else Operator.Status.PENDING)
+            status=Operator.Status.PENDING, source=Operator.Source.ADMIN)   # approved later, once at least Bronze
         OperatorMember.objects.create(operator=op, user=user, member_role=OperatorMember.Role.OWNER)
         return op
 
     @transaction.atomic
     def update(self, op, data):
+        phone_changed = data["phone"] != op.contact_phone
         op.business_name, op.owner_name, op.contact_phone, op.contact_email = data["name"], data["owner"], data["phone"], data["email"]
         op.city = City.by_name(data["city"])
-        if data["verified"] != op.is_verified:
-            op.status = Operator.Status.VERIFIED if data["verified"] else Operator.Status.PENDING
+        if phone_changed:   # a new number has to be confirmed by OTP again
+            op.phone_verified_at = None
         op.save()
+        refresh_tier(op)
         owner = op.owner
         if owner:
             owner.email, owner.full_name = data["email"], data["owner"]

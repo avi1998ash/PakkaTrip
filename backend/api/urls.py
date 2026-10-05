@@ -6,6 +6,7 @@ from . import auth_views as auth
 from . import operator_views as o
 from . import payout_views as pay
 from . import public_views as pub
+from . import verification_views as ver
 from . import webhooks as hooks
 
 urlpatterns = [
@@ -20,6 +21,11 @@ urlpatterns = [
     path("admin/operators/", a.operators),
     path("admin/operators/<int:pk>/", a.operator_detail),
     path("admin/operators/<int:pk>/verify/", a.operator_verify),
+    path("admin/operators/<int:pk>/reject/", ver.reject_application),
+    path("admin/operators/<int:pk>/verification/", ver.operator_verification),
+    path("admin/operators/<int:pk>/documents/<str:kind>/file/", ver.document_file),
+    path("admin/operators/<int:pk>/documents/<str:kind>/<str:action>/", ver.document_action),
+    path("admin/applications/", ver.applications),
     path("admin/packages/", a.packages),
     path("admin/packages/<int:pk>/", a.package_detail),
     path("admin/packages/<int:pk>/<str:action>/", a.package_action),
@@ -50,10 +56,17 @@ urlpatterns = [
     path("operator/reviews/<int:pk>/reply/", o.review_reply),
     path("operator/bank-account/", pay.bank_account),
     path("operator/ifsc/<str:code>/", pay.ifsc),
+    path("operator/verification/", ver.my_verification),
+    path("operator/verification/phone/otp/", ver.phone_otp),
+    path("operator/verification/phone/verify/", ver.phone_verify),
+    path("operator/verification/documents/<str:kind>/", ver.document),
+    path("operator/verification/resubmit/", ver.resubmit),
 
     # public (traveller site)
     path("public/auth/signup/", pub.signup),
     path("public/auth/login/", pub.login),
+    path("public/partner/otp/", ver.signup_otp),
+    path("public/partner/signup/", ver.signup),
     path("public/home/", pub.home),
     path("public/config/", pub.config),
     path("public/packages/", pub.search),

@@ -61,8 +61,18 @@ export function Badge({ status, pkg }) {
   const [cls, text] = STATUS[status] || ['b-grey', status]
   return <span className={`badge ${cls}`}>{pkg && status === 'pending' ? 'Pending review' : text}</span>
 }
-export const VerifiedBadge = ({ verified }) =>
-  verified ? <span className="badge b-green">Verified</span> : <span className="badge b-amber">Unverified</span>
+/** Verification tiers — same rules as backend/operators/verification.py. */
+export const TIERS = [
+  ['gold', 'Gold', ['GST', 'PAN + bank', 'Udyam']],
+  ['silver', 'Silver', ['PAN + bank', 'Aadhaar']],
+  ['bronze', 'Bronze', ['PAN + bank', 'Phone OTP']],
+]
+export const TierBadge = ({ tier }) => {
+  const t = TIERS.find(([id]) => id === tier)
+  return t ? <span className={`badge b-${tier}`}>{t[1]}</span> : <span className="badge b-grey">No tier</span>
+}
+const OP_STATUS = { verified: ['b-green', 'Approved'], pending: ['b-amber', 'Pending review'], rejected: ['b-red', 'Rejected'], suspended: ['b-red', 'Suspended'] }
+export const OpStatusBadge = ({ status }) => <span className={`badge ${OP_STATUS[status]?.[0] || 'b-grey'}`}>{OP_STATUS[status]?.[1] || status}</span>
 
 const DEP = { open: ['b-green', 'Open'], fast: ['b-amber', 'Filling fast'], soldout: ['b-red', 'Sold out'], blocked: ['b-grey', 'Blocked'], departed: ['b-navy', 'Departed'] }
 export const DepBadge = ({ state }) => <span className={`badge ${DEP[state][0]}`}>{DEP[state][1]}</span>

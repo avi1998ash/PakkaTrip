@@ -21,6 +21,8 @@
   --color-ink: #172233;
   --color-muted: #5F6B7D;
   --color-line: #E2E7EF;
+  --color-field: #C3CCD8;         /* form field borders: darker than card lines so boxes stand out */
+  --color-field-hover: #8D9AAD;
   --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-display: Poppins, Inter, sans-serif;
 }
@@ -29,11 +31,18 @@
   body { background: var(--color-page); color: var(--color-ink); font-size: 14px; line-height: 1.5; }
   h1, h2, h3, h4 { font-family: var(--font-display); }
   label { display: block; font-weight: 600; font-size: 12.5px; color: var(--color-muted); margin-bottom: 4px; }
-  input[type=text], input[type=email], input[type=password], input[type=number], input[type=tel], input[type=search], input[type=date], select, textarea {
-    width: 100%; padding: 9px 12px; border: 1px solid var(--color-line); border-radius: 8px; background: #fff;
+  /* All text-like fields — also <input> without a type attribute, which browsers treat as text. */
+  input:where(:not([type=checkbox], [type=radio], [type=file], [type=hidden], [type=range], [type=color], [type=submit], [type=button])), select, textarea {
+    width: 100%; padding: 9px 12px; border: 1.5px solid var(--color-field); border-radius: 8px; background: #fff; color: var(--color-ink);
+    transition: border-color .15s, box-shadow .15s;
   }
+  input:where(:not([type=checkbox], [type=radio], [type=file], [type=hidden], [type=range], [type=color], [type=submit], [type=button])):hover, select:hover, textarea:hover { border-color: var(--color-field-hover); }
+  ::placeholder { color: #8A95A6; opacity: 1; }
+  :is(input, select, textarea):disabled { background: #F1F3F7; color: var(--color-muted); cursor: not-allowed; }
+  input[type=file] { width: 100%; padding: 8px; border: 1.5px dashed var(--color-field); border-radius: 8px; background: #FAFBFD; font-size: 13px; }
+  input[type=file]::file-selector-button { margin-right: 10px; padding: 6px 12px; border: 1px solid var(--color-field); border-radius: 6px; background: #fff; font-weight: 600; cursor: pointer; }
   textarea { resize: vertical; min-height: 90px; }
-  input:focus, select:focus, textarea:focus { outline: 2px solid rgb(242 140 40 / .35); border-color: var(--color-saffron); }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--color-saffron); box-shadow: 0 0 0 3px rgb(242 140 40 / .22); }
 }
 
 @layer components {
@@ -107,6 +116,9 @@
   .b-amber { background: var(--color-amber-soft); color: var(--color-amber); }
   .b-navy { background: var(--color-navy-soft); color: var(--color-navy-2); }
   .b-grey { background: #EEF0F3; color: #555F6D; }
+  .b-gold { background: #FBF0D4; color: #8A5A00; }
+  .b-silver { background: #E9EDF2; color: #4A5565; }
+  .b-bronze { background: #F6E6D8; color: #8B4A1C; }
   .tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: #EEF0F3; color: #555F6D; margin-left: 4px; }
 
   /* seat inventory */

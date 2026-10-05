@@ -6,10 +6,10 @@ import { useFeedback } from './feedback'
 import { Brand, Icon } from './ui'
 
 export const NAV = {
-  admin: [['dashboard', 'Dashboard', 'grid'], ['operators', 'Operators', 'users'], ['packages', 'Packages', 'box'], ['bookings', 'Bookings', 'ticket'], ['payouts', 'Payouts', 'bank'], ['settings', 'Settings', 'cog']],
-  operator: [['dashboard', 'My Dashboard', 'grid'], ['packages', 'My Packages', 'box'], ['inventory', 'Seat Inventory', 'seat'], ['bookings', 'My Bookings', 'ticket'], ['earnings', 'My Earnings', 'wallet'], ['bank', 'Bank & Payouts', 'bank'], ['reviews', 'Reviews', 'star']],
+  admin: [['dashboard', 'Dashboard', 'grid'], ['applications', 'Applications', 'shield'], ['operators', 'Operators', 'users'], ['packages', 'Packages', 'box'], ['bookings', 'Bookings', 'ticket'], ['payouts', 'Payouts', 'bank'], ['settings', 'Settings', 'cog']],
+  operator: [['dashboard', 'My Dashboard', 'grid'], ['packages', 'My Packages', 'box'], ['inventory', 'Seat Inventory', 'seat'], ['bookings', 'My Bookings', 'ticket'], ['earnings', 'My Earnings', 'wallet'], ['bank', 'Bank & Payouts', 'bank'], ['verification', 'Verification', 'shield'], ['reviews', 'Reviews', 'star']],
 }
-const COUNT_KEY = { operator: { bookings: 'op-bookings', reviews: 'reviews' }, admin: { operators: 'operators', packages: 'packages', bookings: 'bookings', payouts: 'payouts' } }
+const COUNT_KEY = { operator: { bookings: 'op-bookings', reviews: 'reviews' }, admin: { applications: 'applications', operators: 'operators', packages: 'packages', bookings: 'bookings', payouts: 'payouts' } }
 
 /** Route guard: no session → login; wrong role → back to the user's own pages. */
 export function RequireRole({ role, children }) {
@@ -33,7 +33,7 @@ export default function Shell() {
 
   const refreshCounts = useCallback(() => api(`${base}/nav-counts/`).then(setCounts).catch(() => {}), [base])
   useEffect(() => { refreshCounts(); setOpen(false) }, [pathname, refreshCounts])
-  // An operator's verified badge can change while they're signed in (admin verifies them).
+  // An operator's approval and tier can change while they're signed in (admin reviews them).
   useEffect(() => { if (role === 'operator') refreshMe().catch(() => {}) }, [pathname, role, refreshMe])
 
   const current = NAV[role].find(([id]) => pathname.startsWith(`${base}/${id}`))

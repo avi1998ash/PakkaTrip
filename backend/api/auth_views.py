@@ -19,7 +19,8 @@ def user_payload(user):
     data = {"id": user.id, "email": user.email, "name": user.full_name, "phone": user.phone, "role": user.role, "operator": None}
     if user.role == User.Role.OPERATOR:
         op = user.operator_membership.operator
-        data["operator"] = {"id": op.id, "name": op.business_name, "owner": op.owner_name, "verified": op.is_verified, "status": op.status}
+        data["operator"] = {"id": op.id, "name": op.business_name, "owner": op.owner_name, "verified": op.is_verified, "status": op.status,
+                            "tier": op.tier or None, "rejection_reason": op.rejection_reason}
     return data
 
 

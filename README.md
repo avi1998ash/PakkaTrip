@@ -102,6 +102,28 @@ Payments go through **Razorpay** (see "Payments" below). Only a label like "Visa
     payments/razorpay.py should be re-checked against Razorpay's docs at that point. Bookings whose transfer fails fall back to payouts.
 - `payment_jobs` also refreshes open payouts and releases Route transfers; webhooks handle `payout.*` and `transfer.failed`.
 
+## Operator sign-up & verification tiers
+
+- Tour operators apply at **/partner/signup** (mobile number confirmed by SMS OTP) and are signed straight in. A new operator
+  is **pending**: they can set up packages and departures, but nothing is shown to travellers until an admin approves them.
+- **Tiers** (operators/verification.py; GST is never required; the highest tier met wins):
+  - **Gold**: GST + PAN + bank + Udyam
+  - **Silver**: PAN + bank + Aadhaar
+  - **Bronze**: PAN + bank + phone OTP
+
+  PAN + bank = the bank details verified on Admin → Payouts. GST, Udyam and Aadhaar are submitted on **Operator → Verification**
+  and verified (or sent back with a reason) by an admin. The tier is recalculated on every change and shown as a badge on the traveller site.
+- **Approval needs at least Bronze.** Admin → **Applications** (sidebar count = operators waiting) shows each applicant's checks,
+  with Approve / Reject. Rejected operators see the reason and can resubmit. Admin → Operators → Review opens the same panel for
+  approved operators (e.g. adding GST + Udyam later to reach Gold).
+- **Aadhaar**: only the last 4 digits and a masked copy (first 8 digits hidden) are kept; the full number is refused. The copy is
+  encrypted with `FIELD_ENCRYPTION_KEY` and stored in `backend/private_media/` (never served publicly); only admins can view it,
+  and each view is written to the audit log. GSTIN format + checksum are validated, and the admin sees whether its PAN matches the bank PAN.
+- **SMS (MSG91)**: set `MSG91_AUTH_KEY` and `MSG91_OTP_TEMPLATE_ID` (a DLT-approved OTP template) in `backend/.env`.
+  Without them, development shows the code on screen; with `DJANGO_DEBUG=False` nothing can be sent. Codes expire after 10 minutes,
+  only a hash is stored, and there are 30 s between codes, 5 codes per hour and 5 tries per code.
+- Changing an operator's mobile number (Admin → Operators → Edit) means it has to be verified by OTP again.
+
 ## How overbooking is prevented
 
 Each departure row stores `total_seats`, `booked_seats` (confirmed + completed) and `held_seats` (pending).

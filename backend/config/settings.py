@@ -78,6 +78,14 @@ USE_TZ = True
 STATIC_URL = "static/"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"          # uploaded package photos
+PRIVATE_MEDIA_ROOT = BASE_DIR / "private_media"   # encrypted operator ID documents; never served at a public URL
+
+# SMS one-time codes via MSG91 (https://control.msg91.com: Authkey, plus a DLT-approved OTP template whose
+# variable is the code). Without MSG91_AUTH_KEY, development (DEBUG on) shows the code on screen instead;
+# with DEBUG off nothing can be sent.
+MSG91_AUTH_KEY = os.environ.get("MSG91_AUTH_KEY", "")
+MSG91_OTP_TEMPLATE_ID = os.environ.get("MSG91_OTP_TEMPLATE_ID", "")
+OTP_TTL_MINUTES = 10
 
 # Razorpay (test keys start with rzp_test_). The webhook secret is the one you set on the Razorpay dashboard.
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")

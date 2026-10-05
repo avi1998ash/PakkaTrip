@@ -1,4 +1,4 @@
-"""Encryption for sensitive fields (bank account numbers, PAN) — Fernet (AES-128-CBC + HMAC).
+"""Encryption for sensitive data (bank account numbers, PAN, ID document copies) — Fernet (AES-128-CBC + HMAC).
 
 The key is FIELD_ENCRYPTION_KEY from backend/.env (generate one with
 `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`).
@@ -24,3 +24,12 @@ def encrypt(value):
 
 def decrypt(token):
     return _fernet().decrypt(token.encode()).decode() if token else ""
+
+
+def encrypt_bytes(data):
+    """For whole files (e.g. a masked Aadhaar copy): the stored file is unreadable without the key."""
+    return _fernet().encrypt(data)
+
+
+def decrypt_bytes(token):
+    return _fernet().decrypt(token)

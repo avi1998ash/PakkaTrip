@@ -5,7 +5,7 @@ import { api } from '../lib/api'
 import { durationLabel, fmtDate, fmtDay, inr, plural } from '../lib/format'
 import { ErrorBox, Spinner } from './parts'
 import { PolicyTable } from './PublicLayout'
-import { Bar, CoverImg, initials, MAX_SEATS, PIcon, qs, SeatPill, seatText, Stars, Verified } from './shared'
+import { Bar, CoverImg, initials, MAX_SEATS, PIcon, qs, SeatPill, seatText, Stars, TIER_INFO, TierBadge } from './shared'
 
 export const feeFor = (base, cfg) => Math.max(Number(cfg.fee_min), Math.round(base * Number(cfg.fee_rate) / 100))
 const SECTION_LABEL = { meals: 'Meals', accommodation: 'Stay', transport: 'Transport', activities: 'Activities', places: 'Sightseeing', other: 'Also included' }
@@ -51,7 +51,7 @@ export default function Trip() {
           <h1>{p.title}</h1>
           <div className="meta"><span><PIcon name="pin" size={15} /> {p.from_city} → {p.to_city}</span><span><PIcon name="clock" size={15} /> {durationLabel(p.nights)}</span>
             {nReviews > 0 && <span><Stars rating={p.rating} /> {p.rating.toFixed(1)} ({nReviews})</span>}
-            <span>by <b>{op.name}</b></span> {op.verified && <Verified />}</div>
+            <span>by <b>{op.name}</b></span> <TierBadge tier={op.tier} /></div>
         </div>
       </div>
 
@@ -106,14 +106,15 @@ export default function Trip() {
             <h2>About the operator</h2>
             <div className="op-card">
               <div className="op-logo">{initials(op.name)}</div>
-              <div style={{ flex: 1, minWidth: 180 }}><h3 style={{ fontSize: 17 }}>{op.name} {op.verified && <Verified />}</h3>
+              <div style={{ flex: 1, minWidth: 180 }}><h3 style={{ fontSize: 17 }}>{op.name} <TierBadge tier={op.tier} /></h3>
                 <div className="help" style={{ margin: '2px 0 0' }}>Based in {op.city} · on PakkaTrip since {fmtDate(op.joined)}</div></div>
               <div className="op-stats">
                 <div><b>{op.reviews ? `${op.rating.toFixed(1)}★` : '—'}</b><span>{plural(op.reviews, 'review')}</span></div>
                 <div><b>{op.trips_run}+</b><span>trips run</span></div>
                 <div><b>{op.live_packages}</b><span>live packages</span></div>
               </div>
-              {op.verified && <div className="bharosa"><PIcon name="shield" size={20} /><div><b>Bharosa badge:</b> PakkaTrip has checked this operator's business registration, tourism licence and vehicle permits.</div></div>}
+              {TIER_INFO[op.tier] && <div className="bharosa"><PIcon name="shield" size={20} /><div><b>{TIER_INFO[op.tier][0]} verified:</b> {TIER_INFO[op.tier][1]}
+                <span className="help" style={{ display: 'block', margin: '4px 0 0' }}>Gold: GST + PAN + bank + Udyam · Silver: PAN + bank + Aadhaar · Bronze: PAN + bank + mobile</span></div></div>}
             </div>
           </div>
 

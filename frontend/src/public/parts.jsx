@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { addDays, durationLabel, fmtDay, inr, plural, todayISO } from '../lib/format'
-import { CoverImg, INC_ICON, INCLUSIONS, MAX_SEATS, PIcon, qs, RatingChip, SeatPill, Verified } from './shared'
+import { CoverImg, INC_ICON, INCLUSIONS, MAX_SEATS, PIcon, qs, RatingChip, SeatPill, TierBadge } from './shared'
 
 const minBookDate = () => addDays(todayISO(), 1)
 
@@ -47,7 +47,7 @@ export function PkgCard({ p, date, pax = 1, row }) {
         <div className="tr"><SeatPill st={best} compact /></div>
       </Link>
       <div className="pkg-body">
-        <div className="op-line">{p.operator} {p.verified && <Verified />}</div>
+        <div className="op-line">{p.operator} <TierBadge tier={p.tier} /></div>
         <h3><Link to={link}>{p.title}</Link></h3>
         <div className="route"><PIcon name="pin" size={15} /> {p.from_city} <PIcon name="arrow" size={14} /> {p.to_city}
           <span className="pill grey" style={{ marginLeft: 'auto' }}>{durationLabel(p.nights)}</span></div>

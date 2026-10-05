@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Brand } from '../components/ui'
 import { homeFor, isPortalUser, useAuth } from '../lib/auth'
 
@@ -55,7 +55,8 @@ export default function Login() {
             </div>
           ))}
         </div>
-        <p className="text-center mt-4 text-[13px]"><a className="link" href="/">← Back to PakkaTrip for travellers</a></p>
+        <p className="text-center mt-4 text-[13px]">New tour operator? <Link className="link" to="/partner/signup">Apply to list your trips →</Link></p>
+        <p className="text-center mt-2 text-[13px]"><a className="link" href="/">← Back to PakkaTrip for travellers</a></p>
       </div>
     </section>
   )

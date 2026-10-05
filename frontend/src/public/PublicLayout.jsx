@@ -99,7 +99,7 @@ export default function PublicLayout() {
               <a href="tel:+919999900000">+91 99999 00000</a>
               <a href="mailto:help@pakkatrip.example">help@pakkatrip.example</a></div>
             <div><h4>Company</h4>
-              <a href="/partner/login">List your trips (operators)</a>
+              <a href="/partner/signup">List your trips (operators)</a>
               <button className="flink" onClick={() => policy('terms')}>Terms of use</button>
               <button className="flink" onClick={() => policy('privacy')}>Privacy policy</button></div>
           </div>

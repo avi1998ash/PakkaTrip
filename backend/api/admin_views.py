@@ -12,7 +12,8 @@ from bookings.services import SeatError, cancel_booking
 from catalog.models import Package
 from core.demo_seed import seed
 from core.models import PlatformSetting, audit
-from operators.models import Operator, OperatorBankAccount
+from operators.models import Operator, OperatorBankAccount, OperatorDocument
+from operators.verification import refresh_tier
 
 from .permissions import IsAdminRole
 from .serializers import (API_STATUS, UNPAID, OperatorIn, PackageIn, SettingsIn, booking_out, booking_qs, operator_out,
@@ -51,7 +52,10 @@ def dashboard(request):
 @permission_classes([IsAdminRole])
 def nav_counts(request):
     return Response({
-        "operators": Operator.objects.filter(status=Operator.Status.PENDING).count(),
+        "applications": Operator.objects.filter(status=Operator.Status.PENDING).count(),
+        # documents approved operators added later (e.g. GST + Udyam to move up to Gold)
+        "operators": OperatorDocument.objects.filter(status=OperatorDocument.Status.PENDING, operator__status=Operator.Status.VERIFIED)
+                     .values("operator").distinct().count(),
         "packages": Package.objects.filter(status=Package.Status.PENDING_REVIEW).count(),
         "bookings": Booking.objects.filter(status__in=API_STATUS["pending"]).count(),
         "payouts": OperatorBankAccount.objects.filter(status=OperatorBankAccount.Status.PENDING).count(),
@@ -113,7 +117,11 @@ def operator_detail(request, pk):
 def operator_verify(request, pk):
     op = get_object_or_404(Operator, pk=pk)
     verified = bool(request.data.get("verified"))
+    if verified and not refresh_tier(op):
+        # every live operator must at least have a checked PAN + bank account (Bronze)
+        return err("Needs at least Bronze before approval: verified PAN + bank details and a verified phone number.")
     op.status = Operator.Status.VERIFIED if verified else Operator.Status.PENDING
+    op.rejection_reason = ""
     op.verified_at, op.verified_by = (timezone.now(), request.user) if verified else (None, None)
     op.save()
     if op.owner and not op.owner.is_active:

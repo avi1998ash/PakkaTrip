@@ -5,6 +5,8 @@ import { FeedbackProvider } from './components/feedback'
 import Shell, { RequireRole } from './components/Shell'
 import './index.css'
 import { AuthProvider } from './lib/auth'
+import { registerServiceWorker, useAppManifest } from './lib/pwa'
+import AdminApplications from './pages/admin/Applications'
 import AdminBookings from './pages/admin/Bookings'
 import AdminDashboard from './pages/admin/Dashboard'
 import AdminOperators from './pages/admin/Operators'
@@ -20,6 +22,8 @@ import Inventory from './pages/operator/Inventory'
 import PackageEditor from './pages/operator/PackageEditor'
 import OpPackages from './pages/operator/Packages'
 import OpReviews from './pages/operator/Reviews'
+import OpVerification from './pages/operator/Verification'
+import Signup from './pages/Signup'
 import Account from './public/Account'
 import Book from './public/Book'
 import Home from './public/Home'
@@ -29,9 +33,17 @@ import Search from './public/Search'
 import Ticket from './public/Ticket'
 import Trip from './public/Trip'
 
+function AppManifest() {
+  useAppManifest()
+  return null
+}
+
+registerServiceWorker()
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
+      <AppManifest />
       <AuthProvider>
         <FeedbackProvider>
           <Routes>
@@ -48,10 +60,12 @@ createRoot(document.getElementById('root')).render(
 
             {/* Partner portal (admin + operators) */}
             <Route path="/partner/login" element={<Login />} />
+            <Route path="/partner/signup" element={<Signup />} />
             <Route path="/login" element={<Navigate to="/partner/login" replace />} />
             <Route path="/admin" element={<RequireRole role="admin"><Shell /></RequireRole>}>
               <Route index element={<Navigate to="dashboard" replace />} />
               <Route path="dashboard" element={<AdminDashboard />} />
+              <Route path="applications" element={<AdminApplications />} />
               <Route path="operators" element={<AdminOperators />} />
               <Route path="packages" element={<AdminPackages />} />
               <Route path="bookings" element={<AdminBookings />} />
@@ -68,6 +82,7 @@ createRoot(document.getElementById('root')).render(
               <Route path="bookings" element={<OpBookings />} />
               <Route path="earnings" element={<OpEarnings />} />
               <Route path="bank" element={<OpBank />} />
+              <Route path="verification" element={<OpVerification />} />
               <Route path="reviews" element={<OpReviews />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

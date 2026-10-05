@@ -6,7 +6,7 @@
     --red: #B42318; --red-soft: #FDECEA;
     --amber: #A15C07; --amber-soft: #FEF3C7;
     --seat-booked: #E04F3F; --seat-pending: #F2B33D; --seat-free: #3BAA5C;
-    --bg: #F4F6FA; --card: #FFFFFF; --text: #172233; --muted: #5F6B7D; --border: #E2E7EF;
+    --bg: #F4F6FA; --card: #FFFFFF; --text: #172233; --muted: #5F6B7D; --border: #E2E7EF; --field: #C3CCD8; --field-hover: #8D9AAD;
     --radius: 14px;
     --shadow: 0 1px 2px rgba(16,24,40,.05), 0 6px 18px rgba(16,24,40,.06);}
 .pub, .pub * {box-sizing: border-box;}
@@ -39,9 +39,11 @@
 .pub .link {color: var(--navy-2); font-weight: 600; text-decoration: none; cursor: pointer; background: none; border: 0; padding: 0;}
 .pub .link:hover {text-decoration: underline;}
 .pub label {display: block; font-weight: 600; font-size: 12.5px; color: var(--muted); margin-bottom: 5px;}
-.pub input[type=text], .pub input[type=email], .pub input[type=password], .pub input[type=tel], .pub input[type=date], .pub input[type=number], .pub select, .pub textarea {width: 100%; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; min-height: 44px;}
+.pub input:where(:not([type=checkbox], [type=radio], [type=file], [type=hidden], [type=range], [type=color], [type=submit], [type=button])), .pub select, .pub textarea {width: 100%; padding: 11px 12px; border: 1.5px solid var(--field); border-radius: 10px; background: #fff; min-height: 44px; transition: border-color .15s, box-shadow .15s;}
+.pub input:where(:not([type=checkbox], [type=radio], [type=file], [type=hidden], [type=range], [type=color], [type=submit], [type=button])):hover, .pub select:hover, .pub textarea:hover {border-color: var(--field-hover);}
+.pub ::placeholder {color: #8A95A6; opacity: 1;}
 .pub textarea {resize: vertical; min-height: 96px;}
-.pub input:focus, .pub select:focus, .pub textarea:focus {outline: 2px solid rgba(242,140,40,.35); border-color: var(--saffron);}
+.pub input:focus, .pub select:focus, .pub textarea:focus {outline: none; border-color: var(--saffron); box-shadow: 0 0 0 3px rgba(242,140,40,.22);}
 .pub .help {font-size: 12.5px; color: var(--muted); margin-top: 4px;}
 .pub .form-grid {display: grid; grid-template-columns: 1fr; gap: 14px;}
 .pub .form-error {background: var(--red-soft); color: var(--red); padding: 10px 12px; border-radius: 10px; font-weight: 500;}
@@ -54,7 +56,10 @@
 .pub .pill.navy {background: var(--navy-soft); color: var(--navy-2);}
 .pub .pill.grey {background: #EEF0F3; color: #555F6D;}
 .pub .pill.solid-red {background: var(--red); color: #fff;}
-.pub .verified {display: inline-flex; align-items: center; gap: 4px; color: var(--green); background: var(--green-soft); font-size: 11.5px; font-weight: 700; padding: 2px 8px 2px 6px; border-radius: 99px; white-space: nowrap;}
+.pub .tier {display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 2px 8px 2px 6px; border-radius: 99px; white-space: nowrap;}
+.pub .tier-gold {color: #8A5A00; background: #FBF0D4;}
+.pub .tier-silver {color: #4A5565; background: #E9EDF2;}
+.pub .tier-bronze {color: #8B4A1C; background: #F6E6D8;}
 .pub .stars {color: var(--saffron); letter-spacing: 1px; white-space: nowrap;}
 .pub .stars .off {color: #D5DAE1;}
 .pub .rating {display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-size: 13px;}

@@ -40,6 +40,15 @@ async function refreshTokens() {
   return refreshing
 }
 
+/** A file the API returns (e.g. an ID document an admin is reviewing), as a Blob. */
+export async function apiBlob(path) {
+  const send = () => fetch('/api' + path, { headers: tokens ? { Authorization: 'Bearer ' + tokens.access } : {} })
+  let r = await send()
+  if (r.status === 401 && tokens?.refresh && await refreshTokens()) r = await send()
+  if (!r.ok) throw new ApiError(messageFrom(await r.json().catch(() => null)) || `Request failed (${r.status})`, r.status)
+  return r.blob()
+}
+
 export async function api(path, { method = 'GET', body } = {}) {
   const isForm = body instanceof FormData   // file uploads: let the browser set the multipart boundary
   const send = () => fetch('/api' + path, {

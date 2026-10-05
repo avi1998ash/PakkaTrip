@@ -3,10 +3,12 @@
 Deterministic (fixed random seed) so every reset looks the same. Dates are relative to today.
 """
 import json
+import shutil
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import connection, transaction
 from django.utils import timezone
 
@@ -17,7 +19,7 @@ from core.crypto import encrypt
 from core.demo_media import add_demo_media, wipe_media
 from core.models import DEFAULT_SETTINGS, AuditLog, CancellationRule, PlatformSetting, fee_for
 from inventory.models import Departure
-from operators.models import Operator, OperatorBankAccount, OperatorMember
+from operators.models import Operator, OperatorBankAccount, OperatorMember, PhoneOtp
 from payments.models import Payment, Payout, Refund, Transfer
 from reviews.models import Review, refresh_ratings
 
@@ -102,6 +104,8 @@ def wipe():
     for model in (Review, Transfer, Refund, Payout, Payment, BookingTraveller, Booking, Departure, PackageImage, PackageFacility, PackageItineraryDay):
         model.objects.all().delete()
     wipe_media()
+    shutil.rmtree(settings.PRIVATE_MEDIA_ROOT, ignore_errors=True)   # encrypted ID document copies
+    PhoneOtp.objects.all().delete()
     Package.all_objects.all().delete()
     OperatorMember.objects.all().delete()
     Operator.objects.all().delete()
