@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useFeedback } from '../components/feedback'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { telHref } from '../lib/format'
 import '../public.css'
 import { firstName, initials, PIcon } from './shared'
 
@@ -83,7 +84,7 @@ export default function PublicLayout() {
               <Link to="/my-bookings">My Bookings</Link>
               <Link to="/refund-policy">Cancellation & refunds</Link>
               <Link to="/contact">Contact us</Link>
-              {site?.support_phone && <a href={`tel:${site.support_phone.replace(/\s/g, '')}`}>{site.support_phone}</a>}
+              {site?.support_phone && <a href={telHref(site.support_phone)}>{site.support_phone}</a>}
               {site?.support_email && <a href={`mailto:${site.support_email}`}>{site.support_email}</a>}</div>
             <div><h4>Company</h4>
               <a href="/partner/signup">List your trips (operators)</a>

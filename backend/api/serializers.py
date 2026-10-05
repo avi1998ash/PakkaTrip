@@ -191,3 +191,4 @@ class SettingsIn(serializers.Serializer):
     require_verified = serializers.BooleanField()
     payout_mode = serializers.ChoiceField(choices=["payouts", "route"], required=False)
     sms_otp_enabled = serializers.BooleanField(required=False)
+    email_otp_enabled = serializers.BooleanField(required=False)

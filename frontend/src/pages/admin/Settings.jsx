@@ -22,7 +22,7 @@ export default function AdminSettings() {
     e.preventDefault()
     if (!e.currentTarget.checkValidity()) { e.currentTarget.reportValidity(); return }
     try {
-      await api('/admin/settings/', { method: 'PUT', body: { fee_rate: Number(s.fee_rate), fee_min: Number(s.fee_min), require_verified: s.require_verified, payout_mode: s.payout_mode, sms_otp_enabled: s.sms_otp_enabled } })
+      await api('/admin/settings/', { method: 'PUT', body: { fee_rate: Number(s.fee_rate), fee_min: Number(s.fee_min), require_verified: s.require_verified, payout_mode: s.payout_mode, sms_otp_enabled: s.sms_otp_enabled, email_otp_enabled: s.email_otp_enabled } })
       setDraft(null); reload(); toast('Settings saved')
     } catch (err) { toast(err.message, true) }
   }
@@ -60,14 +60,18 @@ export default function AdminSettings() {
         </form>
       </div>
       <div className="card max-w-[640px]">
-        <div className="card-head"><h3>SMS one-time codes</h3>
-          <span className={`badge ${data.sms_otp_enabled ? 'b-green' : 'b-grey'}`}>{data.sms_otp_enabled ? 'On' : 'Off'}</span></div>
+        <div className="card-head"><h3>Verification codes at operator signup</h3></div>
         <form className="p-[18px]" onSubmit={save} noValidate>
-          <label className="check items-start"><input type="checkbox" checked={s.sms_otp_enabled} onChange={e => set({ sms_otp_enabled: e.target.checked })} />
-            <span><b>Ask operators for an SMS code</b> to confirm their mobile number at signup and on the Verification page.</span></label>
-          <div className="help mt-2">While this is off, operators sign up without a code. Call them, then press <b>Mark verified</b> on their mobile number in
-            Admin → Applications so they can reach Bronze.
-            {!data.sms_configured && <> Turning it on needs MSG91_AUTH_KEY and MSG91_OTP_TEMPLATE_ID (a DLT-approved template) on the server.</>}</div>
+          <label className="check items-start"><input type="checkbox" checked={s.email_otp_enabled} onChange={e => set({ email_otp_enabled: e.target.checked })} />
+            <span><b>Email code</b> <span className={`badge ${data.email_otp_enabled ? 'b-green' : 'b-grey'}`}>{data.email_otp_enabled ? 'On' : 'Off'}</span><br />
+              Operators confirm their login email with a 6-digit code sent from your Gmail account (about 500 emails a day).
+              {!data.email_configured && <> Needs EMAIL_HOST_USER and EMAIL_HOST_PASSWORD (a Gmail App Password) on the server.</>}</span></label>
+          <label className="check items-start mt-3"><input type="checkbox" checked={s.sms_otp_enabled} onChange={e => set({ sms_otp_enabled: e.target.checked })} />
+            <span><b>SMS code</b> <span className={`badge ${data.sms_otp_enabled ? 'b-green' : 'b-grey'}`}>{data.sms_otp_enabled ? 'On' : 'Off'}</span><br />
+              Operators confirm their mobile number with a code by SMS, at signup and on the Verification page.
+              {!data.sms_configured && <> Needs MSG91_AUTH_KEY and MSG91_OTP_TEMPLATE_ID (a DLT-approved template) on the server.</>}</span></label>
+          <div className="help mt-2">While the SMS code is off, call the operator, then press <b>Mark verified</b> on their mobile number in
+            Admin → Applications so they can reach Bronze.</div>
           <div className="mt-4"><button className="btn btn-navy" type="submit">Save settings</button></div>
         </form>
       </div>

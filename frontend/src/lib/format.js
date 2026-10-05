@@ -6,3 +6,6 @@ export const sum = (list, f) => list.reduce((s, x) => s + Number(f(x) || 0), 0)
 export const durationLabel = n => `${n}N / ${Number(n) + 1}D`
 export const todayISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
 export const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+
+/** tel: link for an Indian mobile number, whatever spacing or +91 it was written with. */
+export const telHref = phone => `tel:+91${String(phone).replace(/\D/g, '').slice(-10)}`

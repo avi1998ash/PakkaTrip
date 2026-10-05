@@ -14,6 +14,8 @@ DEFAULT_SETTINGS = {
     # Mobile OTP by SMS at operator signup / verification. Off until MSG91 + DLT approval are in place:
     # operators then sign up without a code and an admin confirms their number by phone.
     "sms_otp_enabled": False,
+    # Email OTP at operator signup (confirms the login email). Needs the Gmail SMTP login in backend/.env.
+    "email_otp_enabled": False,
 }
 
 
