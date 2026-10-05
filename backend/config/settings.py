@@ -12,6 +12,28 @@ SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 ALLOWED_HOSTS = os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 
+# The public site address. Moving to another domain (e.g. pakkatrip.co.in) is a change here and in
+# DJANGO_ALLOWED_HOSTS, nothing else.
+SITE_URL = os.environ.get("SITE_URL", "http://localhost:5173").rstrip("/")
+CSRF_TRUSTED_ORIGINS = os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", SITE_URL).split(",")
+
+# Business details shown on the Contact, Terms, Privacy and Refund pages (required for Razorpay activation and
+# by the Consumer Protection (E-Commerce) Rules, 2020).
+SITE_INFO = {
+    "url": SITE_URL,
+    "domain": SITE_URL.split("://", 1)[-1],
+    "brand": os.environ.get("SITE_BRAND", "PakkaTrip"),
+    "legal_name": os.environ.get("BUSINESS_LEGAL_NAME", ""),
+    "address": os.environ.get("BUSINESS_ADDRESS", ""),
+    "gstin": os.environ.get("BUSINESS_GSTIN", ""),
+    "support_email": os.environ.get("SUPPORT_EMAIL", ""),
+    "support_phone": os.environ.get("SUPPORT_PHONE", ""),
+    "support_hours": os.environ.get("SUPPORT_HOURS", "Monday to Saturday, 10 am to 7 pm IST"),
+    "grievance_officer": os.environ.get("GRIEVANCE_OFFICER_NAME", ""),
+    "grievance_email": os.environ.get("GRIEVANCE_OFFICER_EMAIL", ""),
+    "jurisdiction": os.environ.get("LEGAL_JURISDICTION_CITY", ""),
+}
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",

@@ -72,6 +72,12 @@ export default function OperatorReview({ initial, onChanged }) {
       update(await api(`/admin/operators/${v.operator_id}/verification/`)); toast(`${v.name} approved. Their packages can go live.`)
     } catch (err) { toast(err.message, true) } finally { setBusy(false) }
   }
+  async function confirmPhone() {
+    setBusy(true)
+    try {
+      update(await api(`/admin/operators/${v.operator_id}/phone/confirm/`, { method: 'POST' })); toast('Mobile number marked as verified')
+    } catch (err) { toast(err.message, true) } finally { setBusy(false) }
+  }
   async function reject() {
     setBusy(true)
     try {
@@ -97,7 +103,9 @@ export default function OperatorReview({ initial, onChanged }) {
           <Status status={v.bank?.status} />
         </div>
         <div className="py-3 border-t border-line flex items-start gap-2 flex-wrap">
-          <div className="flex-1 min-w-[180px]"><b>Mobile number (OTP)</b><div className="text-[13px]">{v.phone.number}</div></div>
+          <div className="flex-1 min-w-[180px]"><b>Mobile number</b><div className="text-[13px]">{v.phone.number}</div>
+            {!v.phone.verified && <button className="btn btn-sm btn-ghost-green mt-2" type="button" disabled={busy} onClick={confirmPhone}>
+              <Icon name="check" size={13} /> Mark verified (I called {v.phone.number})</button>}</div>
           <Status status={v.phone.verified ? 'verified' : null} none="Not verified" />
         </div>
         <DocRow v={v} kind="aadhaar" title="Aadhaar (last 4 + masked copy)" onChange={update}>

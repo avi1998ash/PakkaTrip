@@ -19,7 +19,7 @@ export default function AdminApplications() {
       <div className="toolbar">
         <Chips value={f} onChange={setF} options={[['pending', `Waiting for review (${n('pending')})`], ['rejected', `Sent back (${n('rejected')})`]]} />
         <div className="flex-1" />
-        <span className="sub">Approve needs at least Bronze · Gold: GST + PAN + bank + Udyam · Silver: PAN + bank + Aadhaar · Bronze: PAN + bank + phone OTP</span>
+        <span className="sub">Approve needs at least Bronze · Gold: GST + PAN + bank + Udyam · Silver: PAN + bank + Aadhaar · Bronze: PAN + bank + verified mobile</span>
       </div>
       {rows.length ? rows.map(a => (
         <div key={a.operator_id} className="card">

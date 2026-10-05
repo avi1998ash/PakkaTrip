@@ -3,10 +3,14 @@ import { Link, Navigate } from 'react-router-dom'
 import { Brand, Icon } from '../components/ui'
 import { api } from '../lib/api'
 import { homeFor, isPortalUser, useAuth } from '../lib/auth'
+import { useApi } from '../lib/useApi'
 
-/** Tour operators apply here. The mobile number is confirmed by OTP; then they're signed straight in. */
+/** Tour operators apply here, then they're signed straight in. The mobile number is confirmed by SMS code when
+ *  that's switched on (Admin → Settings); otherwise PakkaTrip confirms it by calling. */
 export default function Signup() {
   const { user, adopt } = useAuth()
+  const { data: cfg } = useApi('/public/config/')
+  const otpOn = !!cfg?.sms_otp_enabled
   const [f, setF] = useState({ business_name: '', owner_name: '', city: '', phone: '', email: '', password: '', otp: '' })
   const [sentTo, setSentTo] = useState('')
   const [devCode, setDevCode] = useState('')
@@ -31,10 +35,11 @@ export default function Signup() {
     e.preventDefault()
     const form = e.currentTarget
     if (!form.checkValidity()) { form.reportValidity(); return }
-    if (sentTo !== f.phone) { setError('Verify your mobile number: tap “Send code” and enter the code from the SMS.'); return }
+    if (otpOn && sentTo !== f.phone) { setError('Verify your mobile number: tap “Send code” and enter the code from the SMS.'); return }
     setBusy('signup'); setError('')
     try {
-      const d = await api('/public/partner/signup/', { method: 'POST', body: f })
+      const { otp, ...rest } = f
+      const d = await api('/public/partner/signup/', { method: 'POST', body: otpOn ? f : rest })
       setSignedUp(true)
       adopt(d)
     } catch (err) { setError(err.message) } finally { setBusy('') }
@@ -60,12 +65,13 @@ export default function Signup() {
               <div className="flex gap-2">
                 <input id="phone" type="tel" required inputMode="numeric" pattern="[6-9][0-9]{9}" maxLength={10} title="10-digit Indian mobile number"
                   autoComplete="tel-national" value={f.phone} onChange={e => set('phone', e.target.value.replace(/\D/g, ''))} />
-                <button className="btn flex-none" type="button" onClick={sendCode} disabled={busy === 'otp'}>
-                  {busy === 'otp' ? 'Sending…' : sentTo && sentTo === f.phone ? 'Resend code' : 'Send code'}</button>
+                {otpOn && <button className="btn flex-none" type="button" onClick={sendCode} disabled={busy === 'otp'}>
+                  {busy === 'otp' ? 'Sending…' : sentTo && sentTo === f.phone ? 'Resend code' : 'Send code'}</button>}
               </div>
-              {sentTo && sentTo === f.phone && <div className="help" style={{ color: 'var(--color-leaf)' }}><Icon name="check" size={13} /> Code sent by SMS to {sentTo}.</div>}
+              {!otpOn && <div className="help">We'll call you on this number to confirm it before approving your business.</div>}
+              {otpOn && sentTo && sentTo === f.phone && <div className="help" style={{ color: 'var(--color-leaf)' }}><Icon name="check" size={13} /> Code sent by SMS to {sentTo}.</div>}
               {devCode && <div className="help">Development mode (no SMS sent): your code is <b>{devCode}</b></div>}</div>
-            {sentTo && sentTo === f.phone && (
+            {otpOn && sentTo && sentTo === f.phone && (
               <div className="full"><label htmlFor="otp">6-digit code from the SMS</label>
                 <input id="otp" required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={f.otp}
                   onChange={e => set('otp', e.target.value.replace(/\D/g, ''))} /></div>
@@ -84,7 +90,8 @@ export default function Signup() {
           Add your PAN + bank details and documents on the Verification page. Approval needs at least <b>Bronze</b> (PAN + bank + mobile).
           Add Aadhaar for <b>Silver</b>, or GST + Udyam for <b>Gold</b>. Travellers see your tier on every trip.
         </div>
-        <p className="text-center mt-4 text-[13px]">Already listed? <Link className="link" to="/partner/login">Sign in</Link> · <a className="link" href="/">PakkaTrip for travellers</a></p>
+        <p className="text-center mt-3 text-[12.5px] text-muted">By creating an account you agree to our <a className="link" href="/terms" target="_blank">Terms</a> and <a className="link" href="/privacy" target="_blank">Privacy policy</a>.</p>
+        <p className="text-center mt-2 text-[13px]">Already listed? <Link className="link" to="/partner/login">Sign in</Link> · <a className="link" href="/">PakkaTrip for travellers</a></p>
       </div>
     </section>
   )

@@ -27,6 +27,7 @@ import Signup from './pages/Signup'
 import Account from './public/Account'
 import Book from './public/Book'
 import Home from './public/Home'
+import { Contact, Privacy, Refund, Terms } from './public/Legal'
 import MyBookings from './public/MyBookings'
 import PublicLayout from './public/PublicLayout'
 import Search from './public/Search'
@@ -56,6 +57,10 @@ createRoot(document.getElementById('root')).render(
               <Route path="ticket/:code" element={<Ticket />} />
               <Route path="my-bookings" element={<MyBookings />} />
               <Route path="account" element={<Account />} />
+              <Route path="terms" element={<Terms />} />
+              <Route path="privacy" element={<Privacy />} />
+              <Route path="refund-policy" element={<Refund />} />
+              <Route path="contact" element={<Contact />} />
             </Route>
 
             {/* Partner portal (admin + operators) */}

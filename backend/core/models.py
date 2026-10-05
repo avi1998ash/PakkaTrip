@@ -11,6 +11,9 @@ DEFAULT_SETTINGS = {
     #   "payouts" — RazorpayX payouts the admin sends after trips complete (works on any Razorpay account)
     #   "route"   — Razorpay Route splits each payment automatically (Route must be enabled by Razorpay)
     "payout_mode": "payouts",
+    # Mobile OTP by SMS at operator signup / verification. Off until MSG91 + DLT approval are in place:
+    # operators then sign up without a code and an admin confirms their number by phone.
+    "sms_otp_enabled": False,
 }
 
 

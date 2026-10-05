@@ -7,7 +7,7 @@ import { useAuth } from '../../lib/auth'
 import { useApi } from '../../lib/useApi'
 
 const DOC_BADGE = { pending: ['b-amber', 'Under review'], verified: ['b-green', 'Verified'], rejected: ['b-red', 'Needs changes'] }
-const CHECK_FOR = { 'PAN + bank': 'pan_bank', 'Phone OTP': 'phone', GST: 'gst', Udyam: 'udyam', Aadhaar: 'aadhaar' }
+const CHECK_FOR = { 'PAN + bank': 'pan_bank', 'Mobile verified': 'phone', GST: 'gst', Udyam: 'udyam', Aadhaar: 'aadhaar' }
 
 const StatusBadge = ({ status }) => status
   ? <span className={`badge ${DOC_BADGE[status][0]}`}>{DOC_BADGE[status][1]}</span>
@@ -134,8 +134,10 @@ export default function OpVerification() {
             {d.bank.status === 'rejected' && <div className="sub" style={{ color: 'var(--color-danger)' }}>{d.bank.rejection_reason}</div>}</> : null}
             <Link className="link ml-2" to="/operator/bank">{d.bank ? 'Bank & Payouts →' : 'Add PAN + bank details →'}</Link></div>
         </Row>
-        <Row title="Mobile number (OTP)" note={`Bronze tier. ${d.phone.number}`} status={<StatusBadge status={d.phone.verified ? 'verified' : null} />}>
-          {!d.phone.verified && <PhoneOtp phone={d.phone.number} onVerified={next => { changed(next); toast('Mobile number verified') }} />}
+        <Row title="Mobile number" note={`Bronze tier. ${d.phone.number}`} status={<StatusBadge status={d.phone.verified ? 'verified' : null} />}>
+          {!d.phone.verified && (d.sms_otp
+            ? <PhoneOtp phone={d.phone.number} onVerified={next => { changed(next); toast('Mobile number verified') }} />
+            : <div className="help mt-2">PakkaTrip will call you on {d.phone.number} to confirm it. No code needed.</div>)}
         </Row>
         <Row title="Aadhaar (owner)" note={`Silver tier. We keep only the last 4 digits and an encrypted masked copy.${docs.aadhaar ? ` On file: ${docs.aadhaar.number}` : ''}`}
           status={<StatusBadge status={docs.aadhaar?.status} />}>

@@ -14,6 +14,7 @@ from rest_framework.test import APITestCase
 
 from accounts.models import User
 from catalog.models import City, Package
+from core.models import PlatformSetting
 from operators.models import Operator, OperatorDocument, PhoneOtp
 from operators.verification import gstin_check_char, read_document_file
 
@@ -50,6 +51,7 @@ class OperatorSignupTests(APITestCase):
 
     def setUp(self):
         cache.clear()
+        PlatformSetting.put("sms_otp_enabled", True)   # most tests cover the SMS flow; SmsOffTests covers it switched off
         self.sms = []   # (phone, code) — stands in for MSG91
         patcher = mock.patch("operators.verification.send_otp_sms", side_effect=lambda phone, code: self.sms.append((phone, code)))
         patcher.start()
@@ -223,3 +225,61 @@ class OperatorSignupTests(APITestCase):
         self.assertEqual(self.sms[-1][0], "9418099999")
         r = self.client.post("/api/operator/verification/phone/verify/", {"code": self.sms[-1][1]}, format="json")
         self.assertEqual((r.data["phone"]["verified"], r.data["tier"]), (True, "bronze"))
+
+
+@override_settings(PRIVATE_MEDIA_ROOT=TEST_PRIVATE, MSG91_AUTH_KEY="", MSG91_OTP_TEMPLATE_ID="", DEBUG=False)
+class SmsOffTests(APITestCase):
+    """SMS codes switched off (the launch default, until DLT approval): direct signup, admin confirms the number by call."""
+
+    @classmethod
+    def setUpTestData(cls):
+        User.objects.create_superuser("admin@pakkatrip.com", "admin123")
+
+    def setUp(self):
+        cache.clear()
+        bank = {"ifsc_lookup": lambda code: {"bank": "HDFC Bank", "branch": "Kaza", "city": "Kaza", "imps": True, "neft": True},
+                "create_contact": lambda *a, **k: {"id": "cont_1"}, "create_fund_account": lambda *a, **k: {"id": "fa_1"}}
+        for name, fn in bank.items():
+            p = mock.patch(f"payments.razorpay.{name}", side_effect=fn)
+            p.start()
+            self.addCleanup(p.stop)
+
+    def as_admin(self):
+        r = self.client.post("/api/auth/login/", {"email": "admin@pakkatrip.com", "password": "admin123"}, format="json")
+        self.client.credentials(HTTP_AUTHORIZATION="Bearer " + r.data["access"])
+
+    def test_off_by_default_and_signup_needs_no_code(self):
+        self.assertFalse(self.client.get("/api/public/config/").data["sms_otp_enabled"])
+        self.assertEqual(self.client.post("/api/public/partner/otp/", {"phone": SIGNUP["phone"]}, format="json").status_code, 400)
+        r = self.client.post("/api/public/partner/signup/", SIGNUP, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        op = Operator.objects.get(contact_phone=SIGNUP["phone"])
+        self.assertEqual((op.status, op.phone_verified_at), ("pending", None))
+        self.assertIsNone(User.objects.get(email=SIGNUP["email"]).phone_verified_at)
+        self.client.credentials(HTTP_AUTHORIZATION="Bearer " + r.data["access"])
+        v = self.client.get("/api/operator/verification/").data
+        self.assertEqual((v["sms_otp"], v["phone"]["verified"]), (False, False))
+        self.assertEqual(self.client.post("/api/operator/verification/phone/otp/", format="json").status_code, 400)
+        # an operator can't confirm their own number
+        self.assertEqual(self.client.post(f"/api/admin/operators/{op.id}/phone/confirm/", format="json").status_code, 403)
+
+    def test_admin_confirms_the_number_by_call_and_operator_reaches_bronze(self):
+        r = self.client.post("/api/public/partner/signup/", SIGNUP, format="json")
+        op = Operator.objects.get(contact_phone=SIGNUP["phone"])
+        self.client.credentials(HTTP_AUTHORIZATION="Bearer " + r.data["access"])
+        self.assertEqual(self.client.put("/api/operator/bank-account/", BANK, format="json").status_code, 200)
+        self.as_admin()
+        self.client.post(f"/api/admin/bank-accounts/{op.id}/verify/", format="json")
+        r = self.client.post(f"/api/admin/operators/{op.id}/phone/confirm/", format="json")
+        self.assertEqual((r.status_code, r.data["phone"]["verified"], r.data["tier"]), (200, True, "bronze"))
+        self.assertEqual(self.client.post(f"/api/admin/operators/{op.id}/phone/confirm/", format="json").status_code, 400)
+
+    def test_admin_switch_needs_msg91_keys(self):
+        self.as_admin()
+        body = {"fee_rate": 2.5, "fee_min": 49, "require_verified": True, "sms_otp_enabled": True}
+        r = self.client.put("/api/admin/settings/", body, format="json")
+        self.assertEqual(r.status_code, 400)
+        with override_settings(MSG91_AUTH_KEY="key", MSG91_OTP_TEMPLATE_ID="tpl"):
+            r = self.client.put("/api/admin/settings/", body, format="json")
+        self.assertEqual((r.status_code, r.data["sms_otp_enabled"]), (200, True))
+        self.assertTrue(self.client.get("/api/public/config/").data["sms_otp_enabled"])

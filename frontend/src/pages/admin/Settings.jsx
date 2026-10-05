@@ -22,7 +22,7 @@ export default function AdminSettings() {
     e.preventDefault()
     if (!e.currentTarget.checkValidity()) { e.currentTarget.reportValidity(); return }
     try {
-      await api('/admin/settings/', { method: 'PUT', body: { fee_rate: Number(s.fee_rate), fee_min: Number(s.fee_min), require_verified: s.require_verified, payout_mode: s.payout_mode } })
+      await api('/admin/settings/', { method: 'PUT', body: { fee_rate: Number(s.fee_rate), fee_min: Number(s.fee_min), require_verified: s.require_verified, payout_mode: s.payout_mode, sms_otp_enabled: s.sms_otp_enabled } })
       setDraft(null); reload(); toast('Settings saved')
     } catch (err) { toast(err.message, true) }
   }
@@ -56,6 +56,18 @@ export default function AdminSettings() {
             <span><b>Razorpay Route (automatic split)</b> — each payment is split as it's captured: the operator's share goes to their linked account, held until the trip completes.
               Razorpay must enable Route on your account first.</span></label>
           <div className="help mt-2">Switching modes applies to new bookings. Operators' bank accounts need verifying again in the new mode (Admin → Payouts).</div>
+          <div className="mt-4"><button className="btn btn-navy" type="submit">Save settings</button></div>
+        </form>
+      </div>
+      <div className="card max-w-[640px]">
+        <div className="card-head"><h3>SMS one-time codes</h3>
+          <span className={`badge ${data.sms_otp_enabled ? 'b-green' : 'b-grey'}`}>{data.sms_otp_enabled ? 'On' : 'Off'}</span></div>
+        <form className="p-[18px]" onSubmit={save} noValidate>
+          <label className="check items-start"><input type="checkbox" checked={s.sms_otp_enabled} onChange={e => set({ sms_otp_enabled: e.target.checked })} />
+            <span><b>Ask operators for an SMS code</b> to confirm their mobile number at signup and on the Verification page.</span></label>
+          <div className="help mt-2">While this is off, operators sign up without a code. Call them, then press <b>Mark verified</b> on their mobile number in
+            Admin → Applications so they can reach Bronze.
+            {!data.sms_configured && <> Turning it on needs MSG91_AUTH_KEY and MSG91_OTP_TEMPLATE_ID (a DLT-approved template) on the server.</>}</div>
           <div className="mt-4"><button className="btn btn-navy" type="submit">Save settings</button></div>
         </form>
       </div>
