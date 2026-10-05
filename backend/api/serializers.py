@@ -190,3 +190,4 @@ class SettingsIn(serializers.Serializer):
     fee_min = serializers.IntegerField(min_value=0, max_value=999)
     require_verified = serializers.BooleanField()
     payout_mode = serializers.ChoiceField(choices=["payouts", "route"], required=False)
+    sms_otp_enabled = serializers.BooleanField(required=False)

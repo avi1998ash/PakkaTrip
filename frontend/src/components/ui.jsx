@@ -65,7 +65,7 @@ export function Badge({ status, pkg }) {
 export const TIERS = [
   ['gold', 'Gold', ['GST', 'PAN + bank', 'Udyam']],
   ['silver', 'Silver', ['PAN + bank', 'Aadhaar']],
-  ['bronze', 'Bronze', ['PAN + bank', 'Phone OTP']],
+  ['bronze', 'Bronze', ['PAN + bank', 'Mobile verified']],
 ]
 export const TierBadge = ({ tier }) => {
   const t = TIERS.find(([id]) => id === tier)

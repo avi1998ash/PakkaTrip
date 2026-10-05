@@ -27,6 +27,12 @@ def enabled():
     return bool(settings.MSG91_AUTH_KEY and settings.MSG91_OTP_TEMPLATE_ID)
 
 
+def otp_on():
+    """The admin switch (Admin → Settings). While off, nobody is asked for an SMS code."""
+    from core.models import PlatformSetting
+    return bool(PlatformSetting.get_all()["sms_otp_enabled"])
+
+
 def can_show_code():
     """In development with no MSG91 keys, the code is returned to the browser, since no SMS goes out."""
     return not enabled() and settings.DEBUG

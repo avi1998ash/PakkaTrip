@@ -25,7 +25,7 @@ from PIL import Image, UnidentifiedImageError
 
 from core.crypto import decrypt, decrypt_bytes, encrypt_bytes
 from core.models import audit
-from core.sms import SmsError, can_show_code, send_otp_sms
+from core.sms import SmsError, can_show_code, otp_on, send_otp_sms
 
 from .models import Operator, OperatorBankAccount, OperatorDocument, PhoneOtp
 
@@ -273,6 +273,7 @@ def verification_out(op, for_admin=False):
         "bank": {"status": acct.status, "account": acct.masked_account, "pan": f"XXXXXX{acct.pan_last4}", "bank_name": acct.bank_name,
                  "rejection_reason": acct.rejection_reason} if acct else None,
         "documents": {k: document_out(docs.get(k)) for k in Kind.values},
+        "sms_otp": otp_on(),
     }
     if for_admin:
         gst = docs.get(Kind.GST)

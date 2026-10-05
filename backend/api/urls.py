@@ -23,6 +23,7 @@ urlpatterns = [
     path("admin/operators/<int:pk>/verify/", a.operator_verify),
     path("admin/operators/<int:pk>/reject/", ver.reject_application),
     path("admin/operators/<int:pk>/verification/", ver.operator_verification),
+    path("admin/operators/<int:pk>/phone/confirm/", ver.phone_confirm),
     path("admin/operators/<int:pk>/documents/<str:kind>/file/", ver.document_file),
     path("admin/operators/<int:pk>/documents/<str:kind>/<str:action>/", ver.document_action),
     path("admin/applications/", ver.applications),

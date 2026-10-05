@@ -19,6 +19,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import User
 from catalog.models import City, unique_slug
+from core import sms
 from core.models import audit
 from operators.models import Operator, OperatorDocument, OperatorMember, PhoneOtp
 from operators.verification import (VerificationError, check_otp, mark_phone_verified, read_document_file, review_document, send_otp,
@@ -31,6 +32,7 @@ from .public_views import PUBLIC, SensitiveThrottle
 from .serializers import ADMIN_EMAIL, validate_phone
 
 Purpose = PhoneOtp.Purpose
+SMS_OFF = "SMS codes are switched off for now. PakkaTrip will call you to confirm your mobile number."
 
 
 def _otp_response(code):
@@ -47,6 +49,8 @@ def phone_taken(phone):
 @permission_classes(PUBLIC)
 @throttle_classes([SensitiveThrottle])
 def signup_otp(request):
+    if not sms.otp_on():
+        return err(SMS_OFF)
     phone = str(request.data.get("phone", "")).strip()
     try:
         validate_phone(phone)
@@ -65,7 +69,7 @@ class PartnerSignupIn(serializers.Serializer):
     owner_name = serializers.RegexField(r"^[A-Za-z][A-Za-z .'-]{1,99}$", error_messages={"invalid": "Enter the owner's full name."})
     city = serializers.RegexField(r"^[A-Za-z][A-Za-z .'-]{1,59}$", error_messages={"invalid": "Enter the city your business is based in."})
     phone = serializers.CharField(validators=[validate_phone])
-    otp = serializers.RegexField(r"^\d{6}$", error_messages={"invalid": "Enter the 6-digit code we sent by SMS."})
+    otp = serializers.RegexField(r"^\d{6}$", required=False, error_messages={"invalid": "Enter the 6-digit code we sent by SMS."})
     email = serializers.EmailField()
     password = serializers.CharField(min_length=8, max_length=64)
 
@@ -86,23 +90,27 @@ class PartnerSignupIn(serializers.Serializer):
 @throttle_classes([SensitiveThrottle])
 def signup(request):
     """A tour operator applies. They can sign in and set up packages straight away; nothing is shown to
-    travellers until an admin approves them (which needs at least Bronze)."""
+    travellers until an admin approves them (which needs at least Bronze).
+    With SMS codes switched off, the number is saved unverified and an admin confirms it by calling."""
     ser = PartnerSignupIn(data=request.data)
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
-    try:
-        check_otp(d["phone"], Purpose.PARTNER_SIGNUP, d["otp"])
-    except VerificationError as e:
-        return Response({"otp": [str(e)]}, status=400)
+    otp_on = sms.otp_on()
+    if otp_on:
+        try:
+            check_otp(d["phone"], Purpose.PARTNER_SIGNUP, d.get("otp"))
+        except VerificationError as e:
+            return Response({"otp": [str(e)]}, status=400)
     name, owner = " ".join(d["business_name"].split()), " ".join(d["owner_name"].split())
     with transaction.atomic():
         user = User.objects.create_user(d["email"], d["password"], full_name=owner, phone=d["phone"], role=User.Role.OPERATOR,
-                                        phone_verified_at=timezone.now())
+                                        phone_verified_at=timezone.now() if otp_on else None)
         op = Operator.objects.create(
             business_name=name, slug=unique_slug(Operator, name), owner_name=owner, contact_phone=d["phone"], contact_email=d["email"],
             city=City.by_name(d["city"]), status=Operator.Status.PENDING, source=Operator.Source.SIGNUP)
         OperatorMember.objects.create(operator=op, user=user, member_role=OperatorMember.Role.OWNER)
-        mark_phone_verified(op, user)
+        if otp_on:
+            mark_phone_verified(op, user)
         audit(user, "operator.applied", op)
     refresh = RefreshToken.for_user(user)
     return Response({"access": str(refresh.access_token), "refresh": str(refresh), "user": user_payload(user)}, status=201)
@@ -127,6 +135,8 @@ def phone_otp(request):
     op = request.operator
     if op.phone_verified_at:
         return err("Your mobile number is already verified.")
+    if not sms.otp_on():
+        return err(SMS_OFF)
     try:
         return _otp_response(send_otp(op.contact_phone, Purpose.OPERATOR_PHONE))
     except VerificationError as e:
@@ -138,6 +148,8 @@ def phone_otp(request):
 @throttle_classes([SensitiveThrottle])
 def phone_verify(request):
     op = request.operator
+    if not sms.otp_on():
+        return err(SMS_OFF)
     try:
         check_otp(op.contact_phone, Purpose.OPERATOR_PHONE, request.data.get("code"))
     except VerificationError as e:
@@ -202,6 +214,18 @@ def reject_application(request, pk):
     op.status, op.rejection_reason = Operator.Status.REJECTED, reason[:200]
     op.save(update_fields=["status", "rejection_reason", "updated_at"])
     audit(request.user, "operator.rejected", op, reason=reason)
+    return Response(verification_out(op, for_admin=True))
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminRole])
+def phone_confirm(request, pk):
+    """The admin called the operator's number and confirmed it (used while SMS codes are off)."""
+    op = get_object_or_404(Operator.objects.select_related("city"), pk=pk)
+    if op.phone_verified_at:
+        return err("This mobile number is already verified.")
+    mark_phone_verified(op, request.user)
+    audit(request.user, "operator.phone_confirmed_by_call", op, phone=op.contact_phone)
     return Response(verification_out(op, for_admin=True))
 
 

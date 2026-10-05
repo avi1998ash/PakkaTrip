@@ -3,7 +3,6 @@ import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-do
 import { useFeedback } from '../components/feedback'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { inr } from '../lib/format'
 import '../public.css'
 import { firstName, initials, PIcon } from './shared'
 
@@ -25,29 +24,16 @@ export function PolicyTable({ policy }) {
 
 export default function PublicLayout() {
   const { user, logout } = useAuth()
-  const { open, toast } = useFeedback()
+  const { toast } = useFeedback()
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const [menu, setMenu] = useState(false)
   const traveller = user?.role === 'traveller' ? user : null
 
-  useEffect(() => { setMenu(false); window.scrollTo(0, 0) }, [pathname])
-  const [testMode, setTestMode] = useState(false)
-  useEffect(() => { api('/public/config/').then(c => setTestMode(!!c.payments_test_mode), () => {}) }, [])
-
-  const policy = async kind => {
-    const titles = { cancellation: 'Cancellation & refunds', terms: 'Terms of use', privacy: 'Privacy policy' }
-    let body
-    if (kind === 'cancellation') {
-      const cfg = await api('/public/config/').catch(() => null)
-      body = cfg ? <div className="pub"><PolicyTable policy={cfg.policy} /><p className="help">Convenience fee: {cfg.fee_rate}% of the package amount, minimum {inr(cfg.fee_min)}.</p></div> : 'Could not load the policy.'
-    } else if (kind === 'terms') {
-      body = <p>PakkaTrip is a marketplace. Trips are run by independent, verified operators, who are responsible for transport, stay and itinerary. PakkaTrip handles booking, payment and refunds as per the published policy.</p>
-    } else {
-      body = <p>We share only your name and mobile number with the operator of the trip you book, for pickup coordination. We never sell your data.</p>
-    }
-    open({ title: titles[kind], body })
-  }
+  useEffect(() => { setMenu(false); if (!window.location.hash) window.scrollTo(0, 0) }, [pathname])
+  const [cfg, setCfg] = useState(null)
+  useEffect(() => { api('/public/config/').then(setCfg, () => {}) }, [])
+  const site = cfg?.site
 
   return (
     <div className="pub min-h-screen">
@@ -95,17 +81,19 @@ export default function PublicLayout() {
               <Link to="/search">All trips</Link></div>
             <div><h4>Help</h4>
               <Link to="/my-bookings">My Bookings</Link>
-              <button className="flink" onClick={() => policy('cancellation')}>Cancellation & refunds</button>
-              <a href="tel:+919999900000">+91 99999 00000</a>
-              <a href="mailto:help@pakkatrip.example">help@pakkatrip.example</a></div>
+              <Link to="/refund-policy">Cancellation & refunds</Link>
+              <Link to="/contact">Contact us</Link>
+              {site?.support_phone && <a href={`tel:${site.support_phone.replace(/\s/g, '')}`}>{site.support_phone}</a>}
+              {site?.support_email && <a href={`mailto:${site.support_email}`}>{site.support_email}</a>}</div>
             <div><h4>Company</h4>
               <a href="/partner/signup">List your trips (operators)</a>
-              <button className="flink" onClick={() => policy('terms')}>Terms of use</button>
-              <button className="flink" onClick={() => policy('privacy')}>Privacy policy</button></div>
+              <Link to="/terms">Terms of use</Link>
+              <Link to="/privacy">Privacy policy</Link>
+              <Link to="/terms#delivery">Booking delivery</Link></div>
           </div>
           <div className="foot-bottom">
-            <span>© PakkaTrip · Made in India for Indian travellers</span>
-            {testMode && <span className="demo-flag">Razorpay test mode — no real money moves</span>}
+            <span>© {new Date().getFullYear()} {site?.legal_name || 'PakkaTrip'} · Made in India for Indian travellers</span>
+            {cfg?.payments_test_mode && <span className="demo-flag">Razorpay test mode — no real money moves</span>}
           </div>
         </div>
       </footer>
