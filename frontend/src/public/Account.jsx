@@ -5,7 +5,8 @@ import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { firstName } from './shared'
 
-const DEMO = ['priya@example.com', 'travel123']
+// Seeded demo traveller: shown in development only, and left out of production builds entirely.
+const DEMO = import.meta.env.DEV ? ['priya@example.com', 'travel123'] : null
 
 /** Traveller login / signup (portal staff use /partner/login). */
 export default function Account() {
@@ -56,9 +57,11 @@ export default function Account() {
         </>}
         <div><label>Email</label><input type="email" required autoComplete="username" value={f.email} onChange={e => set('email', e.target.value)} /></div>
         <div><label>Password</label><input type="password" required minLength={6} autoComplete={tab === 'signup' ? 'new-password' : 'current-password'} value={f.password} onChange={e => set('password', e.target.value)} />
-          {tab === 'signup' && <div className="help">At least 6 characters.</div>}</div>
+          {tab === 'signup' && <div className="help">At least 6 characters.</div>}
+          {tab === 'login' && <div className="help" style={{ textAlign: 'right' }}>
+            <Link className="link" to={`/forgot-password${f.email ? `?email=${encodeURIComponent(f.email)}` : ''}`}>Forgot password?</Link></div>}</div>
         <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={busy}>{busy ? 'Please wait…' : tab === 'signup' ? 'Create account' : 'Log in'}</button>
-        {tab === 'login' && <div className="demo-hint"><span><b>Demo traveller:</b> {DEMO[0]} / {DEMO[1]}</span>
+        {tab === 'login' && DEMO && <div className="demo-hint"><span><b>Demo traveller:</b> {DEMO[0]} / {DEMO[1]}</span>
           <button type="button" className="link" onClick={() => setF(s => ({ ...s, email: DEMO[0], password: DEMO[1] }))}>Fill in</button></div>}
         <div className="or">or</div>
         <button type="button" className="btn btn-block" onClick={() => { toast('Continuing as guest'); navigate(safeNext === '/my-bookings' ? '/search' : safeNext) }}>Continue as guest</button>

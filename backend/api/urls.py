@@ -4,6 +4,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from . import admin_views as a
 from . import auth_views as auth
 from . import operator_views as o
+from . import password_views as pw
 from . import payout_views as pay
 from . import public_views as pub
 from . import verification_views as ver
@@ -66,6 +67,8 @@ urlpatterns = [
     # public (traveller site)
     path("public/auth/signup/", pub.signup),
     path("public/auth/login/", pub.login),
+    path("public/auth/password/forgot/", pw.forgot),
+    path("public/auth/password/reset/", pw.reset),
     path("public/partner/otp/", ver.signup_otp),
     path("public/partner/email-otp/", ver.signup_email_otp),
     path("public/partner/signup/", ver.signup),

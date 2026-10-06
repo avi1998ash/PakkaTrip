@@ -263,7 +263,10 @@ def confirm_online_payment(booking_id, *, order_id, payment_id, method="", detai
     pay.save(update_fields=["status", "gateway_payment_id", "method", "method_detail", "paid_at", "updated_at"])
     audit(None, "booking.paid", b, payment=payment_id)
     from payments.payouts import create_route_transfer
+
+    from .emails import send_booking_confirmation
     transaction.on_commit(lambda: create_route_transfer(b.pk))   # Route mode only; no-op otherwise
+    transaction.on_commit(lambda: send_booking_confirmation(b.pk))   # once: a second confirm returns early above
     return b
 
 

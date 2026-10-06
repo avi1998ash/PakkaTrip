@@ -3,10 +3,11 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Brand } from '../components/ui'
 import { homeFor, isPortalUser, useAuth } from '../lib/auth'
 
-const DEMO = {
+// Seeded demo accounts: shown in development only, and left out of production builds entirely.
+const DEMO = import.meta.env.DEV ? {
   admin: ['admin@pakkatrip.com', 'admin123'],
   operator: ['himalayan@pakkatrip.com', 'operator123'],
-}
+} : null
 
 export default function Login() {
   const { user, login } = useAuth()
@@ -41,11 +42,12 @@ export default function Login() {
           <div className="mb-3.5"><label htmlFor="email">Email</label>
             <input id="email" type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} /></div>
           <div className="mb-3.5"><label htmlFor="password">Password</label>
-            <input id="password" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></div>
+            <input id="password" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} />
+            <div className="text-right mt-1.5 text-[13px]"><Link className="link" to={`/forgot-password?for=partner${email ? `&email=${encodeURIComponent(email)}` : ''}`}>Forgot password?</Link></div></div>
           {error && <div className="text-danger bg-danger-soft rounded-lg px-3 py-2 text-[13px] font-medium mb-3" role="alert">{error}</div>}
           <button className="btn btn-primary w-full justify-center py-[11px]" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         </form>
-        <div className="mt-[18px] p-3 bg-saffron-soft rounded-[10px] text-[12.5px] text-[#7A4510]">
+        {DEMO && <div className="mt-[18px] p-3 bg-saffron-soft rounded-[10px] text-[12.5px] text-[#7A4510]">
           <div className="font-bold mb-1.5">Demo logins</div>
           {[['Admin', 'admin'], ['Operator', 'operator']].map(([label, key]) => (
             <div key={key} className="flex items-center gap-2 py-1">
@@ -54,7 +56,7 @@ export default function Login() {
               <button className="link" type="button" onClick={() => fill(key)}>Fill in</button>
             </div>
           ))}
-        </div>
+        </div>}
         <p className="text-center mt-4 text-[13px]">New tour operator? <Link className="link" to="/partner/signup">Apply to list your trips →</Link></p>
         <p className="text-center mt-2 text-[13px]"><a className="link" href="/">← Back to PakkaTrip for travellers</a></p>
       </div>
