@@ -1,4 +1,4 @@
-"""Email one-time codes over SMTP (Gmail at launch).
+"""Email over SMTP (Gmail at launch): one-time codes, password-reset links and booking confirmations.
 
 Settings (backend/.env): EMAIL_HOST_USER and EMAIL_HOST_PASSWORD (a Gmail App Password, not the account password),
 plus EMAIL_HOST / EMAIL_PORT / EMAIL_USE_TLS. Gmail allows about 500 emails a day from a personal account.
@@ -10,7 +10,7 @@ import logging
 import smtplib
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives, send_mail
 
 log = logging.getLogger(__name__)
 
@@ -46,4 +46,18 @@ def send_otp_email(email, code):
         send_mail(f"{code} is your {brand} verification code", body, settings.DEFAULT_FROM_EMAIL, [email])
     except (smtplib.SMTPException, OSError) as e:
         log.error("Email OTP to %s failed: %s", email, e)
+        raise MailError("We couldn't send the email. Check the address and try again in a minute.") from e
+
+
+def send_email(to, subject, text, html=None):
+    """One email (plain text, plus an HTML version if given). Raises MailError if it can't be sent."""
+    if not enabled() and not settings.DEBUG:
+        raise MailError(f"Email sending isn't set up on this server yet. Please contact {settings.SITE_INFO['brand']} support.")
+    msg = EmailMultiAlternatives(subject, text, settings.DEFAULT_FROM_EMAIL, [to])
+    if html:
+        msg.attach_alternative(html, "text/html")
+    try:
+        msg.send()
+    except (smtplib.SMTPException, OSError) as e:
+        log.error("Email '%s' to %s failed: %s", subject, to, e)
         raise MailError("We couldn't send the email. Check the address and try again in a minute.") from e

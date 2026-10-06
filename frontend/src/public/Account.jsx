@@ -56,7 +56,9 @@ export default function Account() {
         </>}
         <div><label>Email</label><input type="email" required autoComplete="username" value={f.email} onChange={e => set('email', e.target.value)} /></div>
         <div><label>Password</label><input type="password" required minLength={6} autoComplete={tab === 'signup' ? 'new-password' : 'current-password'} value={f.password} onChange={e => set('password', e.target.value)} />
-          {tab === 'signup' && <div className="help">At least 6 characters.</div>}</div>
+          {tab === 'signup' && <div className="help">At least 6 characters.</div>}
+          {tab === 'login' && <div className="help" style={{ textAlign: 'right' }}>
+            <Link className="link" to={`/forgot-password${f.email ? `?email=${encodeURIComponent(f.email)}` : ''}`}>Forgot password?</Link></div>}</div>
         <button className="btn btn-primary btn-lg btn-block" type="submit" disabled={busy}>{busy ? 'Please wait…' : tab === 'signup' ? 'Create account' : 'Log in'}</button>
         {tab === 'login' && <div className="demo-hint"><span><b>Demo traveller:</b> {DEMO[0]} / {DEMO[1]}</span>
           <button type="button" className="link" onClick={() => setF(s => ({ ...s, email: DEMO[0], password: DEMO[1] }))}>Fill in</button></div>}

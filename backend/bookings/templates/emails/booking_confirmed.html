@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Booking confirmed</title></head>
+<body style="margin:0;padding:0;background:#F4F6FA;font-family:Arial,Helvetica,sans-serif;color:#1B2433;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F4F6FA;padding:24px 12px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:12px;overflow:hidden;">
+  <tr><td style="background:#0B2E59;padding:20px 24px;color:#ffffff;">
+    <div style="font-size:20px;font-weight:bold;">{{ site.brand }}</div>
+    <div style="font-size:14px;opacity:.85;margin-top:4px;">Booking confirmed ✓</div>
+  </td></tr>
+  <tr><td style="padding:24px;">
+    <p style="margin:0 0 12px;font-size:15px;">Hi {{ first_name }},</p>
+    <p style="margin:0 0 18px;font-size:15px;line-height:1.5;">Your trip is booked and paid. Show this email or your ticket at pickup.</p>
+
+    <div style="background:#FFF4E8;border-radius:10px;padding:14px 16px;margin-bottom:18px;">
+      <div style="font-size:12px;color:#7A4510;text-transform:uppercase;letter-spacing:.05em;">Booking ID</div>
+      <div style="font-size:22px;font-weight:bold;color:#0B2E59;letter-spacing:.04em;">{{ b.booking_code }}</div>
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:1.45;">
+      <tr><td colspan="2" style="font-size:17px;font-weight:bold;padding-bottom:10px;">{{ b.package.title }}</td></tr>
+      <tr><td style="color:#5B6577;padding:4px 12px 4px 0;width:110px;vertical-align:top;">Route</td><td style="padding:4px 0;">{{ b.package.from_city.name }} → {{ b.package.to_city.name }} ({{ nights }})</td></tr>
+      <tr><td style="color:#5B6577;padding:4px 12px 4px 0;vertical-align:top;">Travel date</td><td style="padding:4px 0;font-weight:bold;">{{ date }}</td></tr>
+      <tr><td style="color:#5B6577;padding:4px 12px 4px 0;vertical-align:top;">Seats</td><td style="padding:4px 0;">{{ b.seats }}</td></tr>
+      <tr><td style="color:#5B6577;padding:4px 12px 4px 0;vertical-align:top;">Travellers</td><td style="padding:4px 0;">{{ travellers|join:", " }}</td></tr>
+      <tr><td style="color:#5B6577;padding:4px 12px 4px 0;vertical-align:top;">Pickup</td><td style="padding:4px 0;">{{ b.package.pickup_point|default:"The operator will share the pickup point and time before the trip." }}</td></tr>
+      <tr><td style="color:#5B6577;padding:4px 12px 4px 0;vertical-align:top;">Operator</td><td style="padding:4px 0;">{{ b.operator.business_name }}{% if b.operator.contact_phone %} · <a href="tel:{{ b.operator.contact_phone }}" style="color:#0B2E59;">{{ b.operator.contact_phone }}</a>{% endif %}</td></tr>
+    </table>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;margin-top:16px;border-top:1px solid #E3E7EF;">
+      <tr><td style="padding:10px 0 4px;color:#5B6577;">Trip fare</td><td align="right" style="padding:10px 0 4px;">{{ fare }}</td></tr>
+      <tr><td style="padding:4px 0;color:#5B6577;">Convenience fee</td><td align="right" style="padding:4px 0;">{{ fee }}</td></tr>
+      <tr><td style="padding:8px 0 0;font-weight:bold;border-top:1px solid #E3E7EF;">Total paid</td><td align="right" style="padding:8px 0 0;font-weight:bold;border-top:1px solid #E3E7EF;">{{ total }}</td></tr>
+    </table>
+
+    <div style="text-align:center;margin:26px 0 8px;">
+      <a href="{{ ticket_url }}" style="display:inline-block;background:#F28C28;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;padding:12px 26px;border-radius:8px;">View your ticket</a>
+    </div>
+    <p style="text-align:center;font-size:12.5px;color:#5B6577;margin:0 0 4px;">You can also cancel or review the trip from your ticket.</p>
+  </td></tr>
+  <tr><td style="background:#F8F9FB;padding:16px 24px;font-size:12.5px;color:#5B6577;line-height:1.6;">
+    <a href="{{ refund_url }}" style="color:#0B2E59;">Cancellation &amp; refund policy</a> ·
+    <a href="{{ support_url }}" style="color:#0B2E59;">Contact support</a>{% if site.support_phone %} · {{ site.support_phone }}{% endif %}<br>
+    {{ site.brand }} · {{ site.domain }}
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

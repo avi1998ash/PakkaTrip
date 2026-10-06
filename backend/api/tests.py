@@ -450,3 +450,80 @@ class PortalTests(APITestCase):
 
     def test_operator_and_admin_cannot_portal_login_as_traveller_and_vice_versa(self):
         self.assertEqual(self.login("priya@example.com", "travel123").status_code, 401)
+
+    # ---- pre-launch: itinerary + pickup, booking email, password reset
+    def test_package_saves_itinerary_and_pickup_point(self):
+        self.login("himalayan@pakkatrip.com", "operator123")
+        days = [{"title": "Delhi → Agra", "text": "Leave at 6 am."}, {"title": "Taj Mahal at sunrise", "text": ""}, {"title": "Extra day", "text": "dropped"}]
+        r = self.client.post("/api/operator/packages/", self._package_form(4, pickup_point=" Kashmere Gate, Delhi · 6:00 AM ",
+                                                                           itinerary=json.dumps(days)), format="multipart")
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(r.data["pickup_point"], "Kashmere Gate, Delhi · 6:00 AM")
+        self.assertEqual([d["title"] for d in r.data["itinerary"]], ["Delhi → Agra", "Taj Mahal at sunrise"])   # 1 night = 2 days
+        self.assertEqual(r.data["itinerary"][0]["text"], "Leave at 6 am.")
+
+    @override_settings(EMAIL_HOST_USER="pakkatrip@gmail.com", EMAIL_HOST_PASSWORD="apppassword", SITE_URL="https://pakkatrip.online")
+    def test_paid_booking_emails_the_ticket_once(self):
+        from django.core import mail
+        r = self._checkout(self.dharamshala(), 2)
+        with self.captureOnCommitCallbacks(execute=True):
+            paid = self._pay(r.data)
+        self.assertEqual(paid.status_code, 200, paid.data)
+        self.assertEqual(len(mail.outbox), 1)
+        m = mail.outbox[0]
+        code, key = r.data["code"], r.data["key"]
+        self.assertEqual(m.to, ["guest@example.com"])
+        self.assertIn(code, m.subject)
+        self.assertIn(f"https://pakkatrip.online/ticket/{code}?key={key}", m.body)
+        self.assertIn("Dharamshala & McLeodganj", m.body)
+        self.assertIn("Guest Traveller, Friend One", m.body)
+        self.assertIn("₹11,273", m.body)
+        self.assertIn(f"/ticket/{code}?key={key}", m.alternatives[0][0])   # HTML version
+        with self.captureOnCommitCallbacks(execute=True):   # the webhook confirming it again doesn't send a second email
+            self._pay({"code": code, "key": key, "razorpay": {"order_id": r.data["razorpay"]["order_id"], "amount": r.data["razorpay"]["amount"]}})
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_booking_email_failure_does_not_break_payment(self):
+        r = self._checkout(self.dharamshala(), 1)   # no SMTP login and DEBUG off: the email can't be sent
+        with self.captureOnCommitCallbacks(execute=True):
+            paid = self._pay(r.data)
+        self.assertEqual(paid.status_code, 200)
+        self.assertEqual(Booking.objects.get(booking_code=r.data["code"]).status, "confirmed")
+
+    def _reset_link(self, email):
+        from django.core import mail
+        r = self.client.post("/api/public/auth/password/forgot/", {"email": email}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        link = next(line for line in mail.outbox[-1].body.splitlines() if "/reset-password?" in line)
+        q = dict(p.split("=", 1) for p in link.split("?", 1)[1].split("&"))
+        return q["uid"], q["token"]
+
+    @override_settings(EMAIL_HOST_USER="pakkatrip@gmail.com", EMAIL_HOST_PASSWORD="apppassword")
+    def test_password_reset_for_traveller_and_operator(self):
+        from django.core import mail
+        uid, token = self._reset_link("Priya@Example.com")
+        url = "/api/public/auth/password/reset/"
+        self.assertEqual(self.client.post(url, {"uid": uid, "token": token, "password": "abc"}, format="json").status_code, 400)
+        r = self.client.post(url, {"uid": uid, "token": token, "password": "newpass1"}, format="json")
+        self.assertEqual((r.status_code, r.data["role"]), (200, "traveller"))
+        self.assertEqual(self.client.post("/api/public/auth/login/", {"email": "priya@example.com", "password": "newpass1"}, format="json").status_code, 200)
+        self.assertEqual(self.client.post(url, {"uid": uid, "token": token, "password": "another1"}, format="json").status_code, 400)   # used once
+        # operators need 8 characters, then log in on the partner portal
+        uid, token = self._reset_link("himalayan@pakkatrip.com")
+        self.assertEqual(self.client.post(url, {"uid": uid, "token": token, "password": "short12"}, format="json").status_code, 400)
+        r = self.client.post(url, {"uid": uid, "token": token, "password": "operator456"}, format="json")
+        self.assertEqual(r.data["role"], "operator")
+        self.assertEqual(self.login("himalayan@pakkatrip.com", "operator456").status_code, 200)
+        # unknown emails get the same answer and no email; a forged token is refused
+        sent = len(mail.outbox)
+        r = self.client.post("/api/public/auth/password/forgot/", {"email": "nobody@example.com"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(mail.outbox), sent)
+        self.assertEqual(self.client.post(url, {"uid": uid, "token": "bad-token", "password": "whatever123"}, format="json").status_code, 400)
+
+    @override_settings(EMAIL_HOST_USER="pakkatrip@gmail.com", EMAIL_HOST_PASSWORD="apppassword")
+    def test_password_reset_email_is_rate_limited_per_address(self):
+        from django.core import mail
+        for _ in range(3):
+            self.client.post("/api/public/auth/password/forgot/", {"email": "priya@example.com"}, format="json")
+        self.assertEqual(len(mail.outbox), 1)

@@ -6,9 +6,11 @@ import ImagesField, { MAX_IMAGES, MIN_IMAGES, toItems } from '../../components/I
 import { Badge, Icon, LoadError, Loading } from '../../components/ui'
 import { api } from '../../lib/api'
 
-const EMPTY = { title: '', from_city: '', to_city: '', nights: 1, price: '', default_seats: 20 }
+const EMPTY = { title: '', from_city: '', to_city: '', nights: 1, price: '', default_seats: 20, pickup_point: '' }
+const BLANK_DAY = { title: '', text: '' }
+const dayCount = nights => Math.min(16, Math.max(1, (parseInt(nights, 10) || 0) + 1))   // 0 nights = a day trip
 
-/** Full-page add / edit form for an operator's package: basics, 4–8 photos, facilities. */
+/** Full-page add / edit form for an operator's package: basics + pickup, 4–8 photos, facilities, day-wise itinerary. */
 export default function PackageEditor() {
   const { id } = useParams()
   const editing = !!id
@@ -21,6 +23,7 @@ export default function PackageEditor() {
   const [images, setImages] = useState([])
   const [cover, setCover] = useState('')
   const [facilities, setFacilities] = useState({})
+  const [days, setDays] = useState([])   // may hold more days than the trip has; trimmed on save
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -30,7 +33,9 @@ export default function PackageEditor() {
       setOptions(opts)
       if (p) {
         setPkg(p)
-        setBasics({ title: p.title, from_city: p.from_city, to_city: p.to_city, nights: p.nights, price: p.price, default_seats: p.default_seats })
+        setBasics({ title: p.title, from_city: p.from_city, to_city: p.to_city, nights: p.nights, price: p.price, default_seats: p.default_seats,
+          pickup_point: p.pickup_point || '' })
+        setDays((p.itinerary || []).map(d => ({ title: d.title, text: d.text || '' })))
         setImages(toItems(p.images))
         setCover(p.images.find(i => i.is_cover) ? `e:${p.images.find(i => i.is_cover).id}` : p.images[0] ? `e:${p.images[0].id}` : '')
         setFacilities(p.facilities)
@@ -43,6 +48,14 @@ export default function PackageEditor() {
 
   const field = (key, props) => <input {...props} value={basics[key]} onChange={e => setBasics(b => ({ ...b, [key]: e.target.value }))} />
   const showError = msg => { setError(msg); toast(msg, true) }
+  const nDays = dayCount(basics.nights)
+  const tripDays = Array.from({ length: nDays }, (_, i) => days[i] || BLANK_DAY)
+  const itineraryStarted = tripDays.some(d => d.title.trim() || d.text.trim())
+  const setDay = (i, key, value) => setDays(ds => {
+    const next = Array.from({ length: Math.max(ds.length, i + 1) }, (_, j) => ds[j] || BLANK_DAY)
+    next[i] = { ...next[i], [key]: value }
+    return next
+  })
 
   async function submit(e) {
     e.preventDefault()
@@ -68,6 +81,8 @@ export default function PackageEditor() {
     fd.append('images', JSON.stringify(tokens))
     fd.append('cover', coverToken || tokens[0])
     fd.append('facilities', JSON.stringify(facilities))
+    // Always sent: the server replaces the itinerary on every save (an empty list = use the generic day plan).
+    fd.append('itinerary', JSON.stringify(itineraryStarted ? tripDays.map(d => ({ title: d.title.trim(), text: d.text.trim() })) : []))
 
     setSaving(true); setError('')
     try {
@@ -96,6 +111,8 @@ export default function PackageEditor() {
           <div><label htmlFor="nights">Nights</label>{field('nights', { id: 'nights', type: 'number', required: true, min: 0, max: 15 })}</div>
           <div><label htmlFor="price">Price per person (₹)</label>{field('price', { id: 'price', type: 'number', required: true, min: 1, step: 1 })}</div>
           <div><label htmlFor="seats">Default seats per departure</label>{field('default_seats', { id: 'seats', type: 'number', required: true, min: 1, max: 80 })}</div>
+          <div className="full"><label htmlFor="pickup">Pickup point & time</label>{field('pickup_point', { id: 'pickup', type: 'text', maxLength: 160, placeholder: 'e.g. Majnu ka Tilla, Delhi · 7:30 PM' })}
+            <p className="help">Shown on the trip page, the ticket and the confirmation email. Leave blank if you'll share it after booking.</p></div>
         </div>
       </section>
 
@@ -109,6 +126,28 @@ export default function PackageEditor() {
         <h4 className="font-semibold text-[15.5px]">Facilities & inclusions</h4>
         <p className="help !mt-0.5 mb-4">Tick what's included in the price. Travellers compare packages on these.</p>
         <FacilitiesField options={options} value={facilities} onChange={setFacilities} />
+      </section>
+
+      <section className="card p-[18px]" id="itinerary">
+        <h4 className="font-semibold text-[15.5px]">Day-wise itinerary</h4>
+        <p className="help !mt-0.5 mb-4">
+          {nDays} day{nDays === 1 ? '' : 's'} for {Number(basics.nights) || 0} night{Number(basics.nights) === 1 ? '' : 's'}. Optional, but travellers book more when they can see the plan.
+          {itineraryStarted && ' Give every day a title.'}
+        </p>
+        <div className="flex flex-col gap-3.5">
+          {tripDays.map((d, i) => (
+            <div key={i} className="grid grid-cols-[52px_1fr] gap-3 items-start">
+              <div className="rounded-lg bg-saffron-soft text-[#7A4510] font-bold text-center py-2 text-[13px] leading-tight">Day<br />{i + 1}</div>
+              <div className="flex flex-col gap-2">
+                <input type="text" aria-label={`Day ${i + 1} title`} required={itineraryStarted} maxLength={140} value={d.title}
+                  placeholder={i === 0 ? `e.g. ${basics.from_city || 'Delhi'} → ${basics.to_city || 'Manali'} overnight` : i === nDays - 1 ? 'e.g. Return journey' : 'e.g. Solang Valley & Hadimba Temple'}
+                  onChange={e => setDay(i, 'title', e.target.value)} />
+                <textarea rows={2} aria-label={`Day ${i + 1} details`} maxLength={1500} value={d.text} placeholder="Timings, places, meals, stay…"
+                  onChange={e => setDay(i, 'text', e.target.value)} />
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       {!editing && <div className="note-box !mt-0 bg-amber-soft text-amber">New packages start as <b>Pending review</b> and go live once PakkaTrip approves them.</div>}

@@ -109,8 +109,9 @@ PRIVATE_MEDIA_ROOT = BASE_DIR / "private_media"   # encrypted operator ID docume
 MSG91_AUTH_KEY = os.environ.get("MSG91_AUTH_KEY", "")
 MSG91_OTP_TEMPLATE_ID = os.environ.get("MSG91_OTP_TEMPLATE_ID", "")
 OTP_TTL_MINUTES = 10
+PASSWORD_RESET_TIMEOUT = 60 * 60   # seconds a "forgot password" link stays valid
 
-# Email (one-time codes). Gmail: EMAIL_HOST_USER is the Gmail address and EMAIL_HOST_PASSWORD a 16-character App Password
+# Email (one-time codes, password-reset links, booking confirmations). Gmail: EMAIL_HOST_USER is the Gmail address and EMAIL_HOST_PASSWORD a 16-character App Password
 # (Google Account → Security → 2-Step Verification → App passwords). Without a login, development prints emails to the log.
 EMAIL_HOST = os.environ.get("EMAIL_HOST", "smtp.gmail.com")
 EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
