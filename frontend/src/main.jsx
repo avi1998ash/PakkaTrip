@@ -29,6 +29,7 @@ import Book from './public/Book'
 import Home from './public/Home'
 import { Contact, Privacy, Refund, Terms } from './public/Legal'
 import MyBookings from './public/MyBookings'
+import { ForgotPassword, ResetPassword } from './public/Password'
 import PublicLayout from './public/PublicLayout'
 import Search from './public/Search'
 import Ticket from './public/Ticket'
@@ -57,6 +58,8 @@ createRoot(document.getElementById('root')).render(
               <Route path="ticket/:code" element={<Ticket />} />
               <Route path="my-bookings" element={<MyBookings />} />
               <Route path="account" element={<Account />} />
+              <Route path="forgot-password" element={<ForgotPassword />} />
+              <Route path="reset-password" element={<ResetPassword />} />
               <Route path="terms" element={<Terms />} />
               <Route path="privacy" element={<Privacy />} />
               <Route path="refund-policy" element={<Refund />} />

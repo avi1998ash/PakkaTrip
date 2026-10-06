@@ -41,7 +41,8 @@ export default function Login() {
           <div className="mb-3.5"><label htmlFor="email">Email</label>
             <input id="email" type="email" autoComplete="username" required value={email} onChange={e => setEmail(e.target.value)} /></div>
           <div className="mb-3.5"><label htmlFor="password">Password</label>
-            <input id="password" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} /></div>
+            <input id="password" type="password" autoComplete="current-password" required value={password} onChange={e => setPassword(e.target.value)} />
+            <div className="text-right mt-1.5 text-[13px]"><Link className="link" to={`/forgot-password?for=partner${email ? `&email=${encodeURIComponent(email)}` : ''}`}>Forgot password?</Link></div></div>
           {error && <div className="text-danger bg-danger-soft rounded-lg px-3 py-2 text-[13px] font-medium mb-3" role="alert">{error}</div>}
           <button className="btn btn-primary w-full justify-center py-[11px]" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         </form>
