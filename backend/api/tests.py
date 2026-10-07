@@ -176,11 +176,17 @@ class PortalTests(APITestCase):
                 "new_images": [self._jpeg(f"p{i}.jpg") for i in range(n_images)],
                 "facilities": json.dumps({"meals": ["Breakfast", "breakfast"], "places": ["Taj Mahal", "Agra Fort"], "bogus": ["x"]}), **extra}
 
-    def test_package_needs_four_to_eight_photos(self):
+    def test_package_needs_one_to_eight_photos(self):
         self.login("himalayan@pakkatrip.com", "operator123")
-        r = self.client.post("/api/operator/packages/", self._package_form(3), format="multipart")
+        r = self.client.post("/api/operator/packages/", self._package_form(0), format="multipart")
         self.assertEqual(r.status_code, 400)
-        self.assertIn("between 4 and 8", r.data["detail"])
+        self.assertIn("between 1 and 8", r.data["detail"])
+        r = self.client.post("/api/operator/packages/", self._package_form(9), format="multipart")
+        self.assertEqual(r.status_code, 400)
+        r = self.client.post("/api/operator/packages/", self._package_form(1, cover="n:0"), format="multipart")
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(len(r.data["images"]), 1)
+        self.assertTrue(r.data["images"][0]["is_cover"])
 
     def test_package_saves_photos_cover_and_facilities(self):
         self.login("himalayan@pakkatrip.com", "operator123")

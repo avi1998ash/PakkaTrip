@@ -93,7 +93,7 @@ def package_image_path(instance, filename):
 
 class PackageImage(models.Model):
     """Photos for a package. Files live in MEDIA_ROOT/packages/<package id>/."""
-    MIN, MAX = 4, 8
+    MIN, MAX = 1, 8
 
     package = models.ForeignKey(Package, on_delete=models.CASCADE, related_name="images")
     image = models.ImageField(upload_to=package_image_path)

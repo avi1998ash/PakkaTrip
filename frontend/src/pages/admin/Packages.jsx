@@ -63,7 +63,6 @@ export default function AdminPackages() {
             </div>
             <div><div className="font-semibold text-[13.5px] mb-1.5">Photos ({d.images.length})</div><Gallery images={d.images} small /></div>
             <div><div className="font-semibold text-[13.5px] mb-2">Facilities & inclusions</div><FacilitiesView facilities={d.facilities} compact /></div>
-            {d.images.length < 4 && <div className="note-box !mt-0 bg-amber-soft text-amber">This package has fewer than 4 photos.</div>}
           </div>
         ),
       })
