@@ -10,7 +10,7 @@ const EMPTY = { title: '', from_city: '', to_city: '', nights: 1, price: '', def
 const BLANK_DAY = { title: '', text: '' }
 const dayCount = nights => Math.min(16, Math.max(1, (parseInt(nights, 10) || 0) + 1))   // 0 nights = a day trip
 
-/** Full-page add / edit form for an operator's package: basics + pickup, 4–8 photos, facilities, day-wise itinerary. */
+/** Full-page add / edit form for an operator's package: basics + pickup, 1–8 photos, facilities, day-wise itinerary. */
 export default function PackageEditor() {
   const { id } = useParams()
   const editing = !!id
@@ -118,7 +118,7 @@ export default function PackageEditor() {
 
       <section className="card p-[18px]" id="photos">
         <h4 className="font-semibold text-[15.5px]">Photos</h4>
-        <p className="help !mt-0.5 mb-3.5">Real photos of the bus, stay and places build trust. Add {MIN_IMAGES}–{MAX_IMAGES}.</p>
+        <p className="help !mt-0.5 mb-3.5">Add {MIN_IMAGES} to {MAX_IMAGES} photos. Real photos of the bus, stay and places build trust.</p>
         <ImagesField items={images} onChange={setImages} cover={cover} onCoverChange={setCover} onError={showError} />
       </section>
 

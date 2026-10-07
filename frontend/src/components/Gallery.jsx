@@ -66,7 +66,7 @@ export default function Gallery({ images, small }) {
         </div>
       ) : (
         <div className="grid grid-cols-4 grid-rows-2 gap-2 h-[260px] sm:h-[380px] rounded-[14px] overflow-hidden">
-          <button type="button" onClick={() => setOpen(0)} className="col-span-4 row-span-2 sm:col-span-2 relative">
+          <button type="button" onClick={() => setOpen(0)} className={`col-span-4 row-span-2 relative ${rest.length ? 'sm:col-span-2' : ''}`}>
             <img src={main.url} alt="Cover photo" className="w-full h-full object-cover" />
           </button>
           {rest.slice(0, 4).map((img, i, shown) => (
@@ -78,7 +78,7 @@ export default function Gallery({ images, small }) {
           ))}
         </div>
       )}
-      {!small && <button type="button" className="btn btn-sm mt-2" onClick={() => setOpen(0)}><Icon name="image" size={15} /> View all {list.length} photos</button>}
+      {!small && <button type="button" className="btn btn-sm mt-2" onClick={() => setOpen(0)}><Icon name="image" size={15} /> {list.length === 1 ? 'View photo' : `View all ${list.length} photos`}</button>}
       {open !== null && <Lightbox images={list} index={open} onIndex={setOpen} onClose={() => setOpen(null)} />}
     </>
   )

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from './ui'
 
-export const MIN_IMAGES = 4
+export const MIN_IMAGES = 1
 export const MAX_IMAGES = 8
 const MAX_BYTES = 5 * 1024 * 1024
 const TYPES = ['image/jpeg', 'image/png', 'image/webp']
