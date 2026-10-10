@@ -4,6 +4,7 @@ Browsing needs no login. Bookings can be made as a guest or a signed-in travelle
 their own ticket with the booking's secret key (returned once at checkout, or via "find booking").
 """
 import secrets
+import time
 from collections import defaultdict
 
 from django.conf import settings
@@ -23,13 +24,13 @@ from accounts.models import User
 from bookings.models import Booking
 from bookings.services import (LatePaymentError, SeatError, abandon_payment, cancel_booking, create_online_booking,
                                customer_refund_quote, hold_expires_at, price_quote, release_expired_holds, seat_stats,
-                               settle_online_payment)
+                               settle_cashfree_payment, settle_online_payment)
 from catalog.media import facilities_out, images_out
 from catalog.models import Package
 from core.models import CancellationRule, PlatformSetting
 from inventory.models import Departure
 from operators.models import Operator
-from payments import razorpay
+from payments import cashfree, razorpay
 from payments.models import Payment
 from reviews.models import Review, refresh_ratings
 
@@ -263,10 +264,26 @@ def policy_out():
 def config(request):
     s = PlatformSetting.get_all()
     pkgs = live_packages().values_list("from_city__name", "to_city__name")
-    return Response({"fee_rate": s["fee_rate_pct"], "fee_min": s["fee_min_inr"], "policy": policy_out(),
-                     "payments_test_mode": settings.RAZORPAY_KEY_ID.startswith("rzp_test_"),
-                     "sms_otp_enabled": s["sms_otp_enabled"], "email_otp_enabled": s["email_otp_enabled"], "site": settings.SITE_INFO,
-                     "cities": {"from": sorted({f for f, _ in pkgs}), "to": sorted({t for _, t in pkgs})}})
+    active_gw = s.get("active_payment_gateway", "cashfree")
+    is_test = (
+        (getattr(settings, "CASHFREE_ENV", "TEST") == "TEST")
+        if active_gw == "cashfree"
+        else settings.RAZORPAY_KEY_ID.startswith("rzp_test_")
+    )
+    return Response({
+        "fee_rate": s["fee_rate_pct"],
+        "fee_min": s["fee_min_inr"],
+        "policy": policy_out(),
+        "active_payment_gateway": active_gw,
+        "payments_test_mode": is_test,
+        "cashfree_test_mode": getattr(settings, "CASHFREE_ENV", "TEST") == "TEST",
+        "cashfree_configured": cashfree.enabled(),
+        "razorpay_configured": razorpay.enabled(),
+        "sms_otp_enabled": s["sms_otp_enabled"],
+        "email_otp_enabled": s["email_otp_enabled"],
+        "site": settings.SITE_INFO,
+        "cities": {"from": sorted({f for f, _ in pkgs}), "to": sorted({t for _, t in pkgs})},
+    })
 
 
 # ---------------------------------------------------------------- booking
@@ -302,17 +319,25 @@ class BookingIn(serializers.Serializer):
     phone = serializers.CharField(validators=[validate_phone])
     email = serializers.EmailField()
     co_travellers = serializers.ListField(child=serializers.CharField(max_length=100, allow_blank=True), required=False, default=list)
+    gateway = serializers.ChoiceField(choices=["cashfree", "razorpay"], required=False)
 
 
 @api_view(["POST"])
 @permission_classes(PUBLIC)
 def create_booking(request):
-    """Hold the seats and open a Razorpay order. The booking is confirmed by /pay/verify/ (or the webhook)."""
-    if not razorpay.enabled():
-        return err("Online payments aren't set up yet. Please try again later.", 503)
+    """Hold the seats and open a Cashfree or Razorpay order. The booking is confirmed by /pay/verify/ (or webhook)."""
     ser = BookingIn(data=request.data)
     ser.is_valid(raise_exception=True)
     d = ser.validated_data
+
+    s = PlatformSetting.get_all()
+    active_gw = d.get("gateway") or s.get("active_payment_gateway", "razorpay")
+
+    if active_gw == "cashfree" and not cashfree.enabled():
+        return err("Cashfree payments aren't set up yet. Please try again later.", 503)
+    if active_gw == "razorpay" and not razorpay.enabled():
+        return err("Razorpay payments aren't set up yet. Please try again later.", 503)
+
     co = [c.strip() for c in d["co_travellers"] if c.strip()][: d["seats"] - 1]
     release_expired_holds(d["departure_id"])
     try:
@@ -323,6 +348,38 @@ def create_booking(request):
         return err("This departure no longer exists.", 404)
     except SeatError as e:
         return err(str(e))
+
+    if active_gw == "cashfree":
+        cf_order_id = f"{b.booking_code}_{int(time.time())}"
+        try:
+            cf_order = cashfree.create_order(
+                amount=b.total_amount,
+                order_id=cf_order_id,
+                customer_name=b.lead_name,
+                customer_email=b.lead_email,
+                customer_phone=b.lead_phone,
+                notes={"booking": b.booking_code},
+            )
+        except cashfree.GatewayError as e:
+            abandon_payment(b.pk, reason="Cashfree order could not be created")
+            return err(f"{e} No money was charged.", 502)
+
+        Payment.objects.create(booking=b, gateway="cashfree", gateway_order_id=cf_order_id, amount=b.total_amount)
+        return Response({
+            "code": b.booking_code,
+            "key": b.guest_token,
+            "total": b.total_amount,
+            "hold_expires_at": hold_expires_at(b),
+            "gateway": "cashfree",
+            "cashfree": {
+                "order_id": cf_order_id,
+                "cf_order_id": cf_order.get("cf_order_id"),
+                "payment_session_id": cf_order.get("payment_session_id"),
+                "environment": getattr(settings, "CASHFREE_ENV", "TEST").lower(),
+            },
+        }, status=201)
+
+    # Razorpay gateway
     try:
         order = razorpay.create_order(b.total_amount, receipt=b.booking_code, notes={"booking": b.booking_code})
     except razorpay.GatewayError as e:
@@ -331,6 +388,7 @@ def create_booking(request):
     Payment.objects.create(booking=b, gateway="razorpay", gateway_order_id=order["id"], amount=b.total_amount)
     return Response({
         "code": b.booking_code, "key": b.guest_token, "total": b.total_amount, "hold_expires_at": hold_expires_at(b),
+        "gateway": "razorpay",
         "razorpay": {
             "key": settings.RAZORPAY_KEY_ID, "order_id": order["id"], "amount": order["amount"], "currency": order["currency"],
             "name": "PakkaTrip", "description": f"{b.package.title} · {b.departure.departure_date:%d %b %Y} · {b.seats} seat(s)",
@@ -343,10 +401,40 @@ def create_booking(request):
 @api_view(["POST"])
 @permission_classes(PUBLIC)
 def payment_verify(request, code):
-    """Razorpay checkout's success callback: check the signature, then confirm the booking."""
+    """Verify checkout payment (Cashfree or Razorpay), check status/signature, then confirm the booking."""
     b = owned_booking(request, code, unpaid=True)
     if not b:
         return err("Booking not found.", 404)
+
+    is_cashfree = (
+        request.data.get("gateway") == "cashfree"
+        or "cashfree_order_id" in request.data
+        or "payment_session_id" in request.data
+        or b.payments.filter(gateway="cashfree").exists()
+    )
+
+    if is_cashfree:
+        cf_order_id = request.data.get("cashfree_order_id") or request.data.get("order_id")
+        if not cf_order_id:
+            cf_pay = b.payments.filter(gateway="cashfree").first()
+            cf_order_id = cf_pay.gateway_order_id if cf_pay else None
+        if not cf_order_id or not b.payments.filter(gateway_order_id=cf_order_id).exists():
+            return err("We couldn't verify this payment. Payment record not found.")
+        try:
+            settle_cashfree_payment(
+                b.pk,
+                order_id=cf_order_id,
+                cf_payment_id=request.data.get("cf_payment_id"),
+                signature=request.data.get("signature", ""),
+            )
+        except LatePaymentError as e:
+            return err(str(e), 409)
+        except SeatError as e:
+            return err(str(e))
+        except cashfree.GatewayError as e:
+            return err("Payment received, but we couldn't reach Cashfree to confirm it. Your booking will update in a few minutes — check My Bookings.", 502)
+        return Response(ticket_out(_booking(b.booking_code), key=True))
+
     order_id = str(request.data.get("razorpay_order_id", ""))
     payment_id = str(request.data.get("razorpay_payment_id", ""))
     if not razorpay.verify_checkout_signature(order_id, payment_id, request.data.get("razorpay_signature")) \

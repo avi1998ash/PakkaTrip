@@ -27,6 +27,7 @@ class Payment(models.Model):
     gateway = models.CharField(max_length=20, default="razorpay")
     gateway_order_id = models.CharField(max_length=64, unique=True)
     gateway_payment_id = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    gateway_signature = models.CharField(max_length=255, blank=True, default="")
     method = models.CharField(max_length=12, choices=Method.choices, blank=True, default="")
     method_detail = models.CharField(max_length=60, blank=True, default="")
     amount = models.DecimalField(max_digits=12, decimal_places=2)

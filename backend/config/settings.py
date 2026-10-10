@@ -6,7 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env", override=True)
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
@@ -127,6 +127,14 @@ DEFAULT_FROM_EMAIL = f"{SITE_INFO['brand']} <{EMAIL_HOST_USER or 'noreply@localh
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "")
+
+# Cashfree Payments (PG v3 API)
+CASHFREE_APP_ID = os.environ.get("CASHFREE_APP_ID", "")
+CASHFREE_SECRET_KEY = os.environ.get("CASHFREE_SECRET_KEY", "")
+CASHFREE_WEBHOOK_SECRET = os.environ.get("CASHFREE_WEBHOOK_SECRET", "")
+CASHFREE_ENV = os.environ.get("CASHFREE_ENV", "TEST").upper()
+CASHFREE_API_VERSION = os.environ.get("CASHFREE_API_VERSION", "2023-08-01")
+
 PAYMENT_HOLD_MINUTES = int(os.environ.get("PAYMENT_HOLD_MINUTES", "15"))   # seats held while the traveller pays
 # RazorpayX (operator payouts): the RazorpayX account number money is paid out from (Dashboard → My Account).
 RAZORPAYX_ACCOUNT_NUMBER = os.environ.get("RAZORPAYX_ACCOUNT_NUMBER", "")

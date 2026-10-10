@@ -252,13 +252,20 @@ def platform_settings(request):
         PlatformSetting.put("fee_rate_pct", float(d["fee_rate"]), request.user)
         PlatformSetting.put("fee_min_inr", d["fee_min"], request.user)
         PlatformSetting.put("require_verified_operator", d["require_verified"], request.user)
+        gw = d.get("active_payment_gateway") or d.get("payment_gateway")
+        if gw:
+            PlatformSetting.put("active_payment_gateway", gw, request.user)
         if "payout_mode" in d:
             PlatformSetting.put("payout_mode", d["payout_mode"], request.user)
         for key in ("sms_otp_enabled", "email_otp_enabled"):
             if key in d:
                 PlatformSetting.put(key, d[key], request.user)
     s = PlatformSetting.get_all()
+    from payments import cashfree, razorpay
     return Response({"fee_rate": s["fee_rate_pct"], "fee_min": s["fee_min_inr"], "require_verified": s["require_verified_operator"],
+                     "active_payment_gateway": s.get("active_payment_gateway", "cashfree"),
+                     "cashfree_configured": cashfree.enabled(), "cashfree_env": getattr(settings, "CASHFREE_ENV", "TEST"),
+                     "razorpay_configured": razorpay.enabled(),
                      "payout_mode": s["payout_mode"], "sms_otp_enabled": s["sms_otp_enabled"], "sms_configured": sms.enabled(),
                      "email_otp_enabled": s["email_otp_enabled"], "email_configured": mailer.enabled(),
                      "can_reset": settings.DEBUG})

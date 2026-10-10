@@ -27,6 +27,19 @@ function loadRazorpay() {
   return razorpayScript
 }
 
+let cashfreeScript = null
+function loadCashfree() {
+  cashfreeScript ??= new Promise((resolve, reject) => {
+    if (window.Cashfree) return resolve(window.Cashfree)
+    const s = document.createElement('script')
+    s.src = 'https://sdk.cashfree.com/js/v3/cashfree.js'
+    s.onload = () => resolve(window.Cashfree)
+    s.onerror = () => { cashfreeScript = null; reject(new Error("Couldn't load Cashfree SDK. Check your internet connection and try again.")) }
+    document.body.appendChild(s)
+  })
+  return cashfreeScript
+}
+
 export default function Book() {
   const { id } = useParams()
   const [params] = useSearchParams()
@@ -44,7 +57,7 @@ export default function Book() {
   const [quote, setQuote] = useState(null)
   const [agree, setAgree] = useState(false)
   const [error, setError] = useState('')
-  const [checkout, setCheckout] = useState(null)   // held booking + Razorpay order from the server
+  const [checkout, setCheckout] = useState(null)   // held booking + gateway order from the server
   const [paying, setPaying] = useState(false)
   const [verifying, setVerifying] = useState(false)
   const [payNote, setPayNote] = useState('')
@@ -88,7 +101,7 @@ export default function Book() {
     api(`/public/packages/${id}/`).then(setP).catch(() => {})
   }
 
-  // Step 1 of payment: hold the seats on the server and get a Razorpay order (reused if the traveller retries).
+  // Step 1 of payment: hold seats on the server and get a gateway order (Cashfree or Razorpay).
   async function pay() {
     setPayNote(''); setPaying(true)
     let co = checkout
@@ -99,6 +112,27 @@ export default function Book() {
           co_travellers: others.slice(0, seats - 1) } })
         setCheckout(co)
       }
+
+      if (co.gateway === 'cashfree') {
+        const Cashfree = await loadCashfree()
+        const cf = Cashfree({ mode: co.cashfree.environment === 'production' ? 'production' : 'sandbox' })
+        cf.checkout({
+          paymentSessionId: co.cashfree.payment_session_id,
+          redirectTarget: '_modal'
+        }).then(result => {
+          if (result?.error) {
+            setPaying(false)
+            setPayNote(`${result.error.message || 'Payment not completed.'} You can try again or use another method.`)
+          } else {
+            verifyCashfree(co, result)
+          }
+        }).catch(err => {
+          setPaying(false)
+          setPayNote(err.message || 'Cashfree checkout error.')
+        })
+        return
+      }
+
       const Razorpay = await loadRazorpay()
       const rzp = new Razorpay({
         key: co.razorpay.key, order_id: co.razorpay.order_id, amount: co.razorpay.amount, currency: co.razorpay.currency,
@@ -115,7 +149,30 @@ export default function Book() {
     }
   }
 
-  // Step 2: Razorpay says it's paid — the server checks the signature with Razorpay before confirming.
+  // Step 2: Cashfree payment callback verification
+  async function verifyCashfree(co, result) {
+    setPaying(false); setVerifying(true)
+    try {
+      const b = await api(`/public/bookings/${co.code}/pay/verify/`, {
+        method: 'POST',
+        body: {
+          key: co.key,
+          gateway: 'cashfree',
+          cashfree_order_id: co.cashfree.order_id,
+          order_id: co.cashfree.order_id,
+          payment_session_id: co.cashfree.payment_session_id,
+          signature: result?.paymentDetails?.signature || '',
+        }
+      })
+      rememberTicket(b.code, b.key)
+      navigate(`/ticket/${b.code}` + qs({ new: 1 }), { replace: true })
+    } catch (err) {
+      if (err.status === 409) backToStart(err.message)
+      else { setVerifying(false); setPayNote(err.message) }
+    }
+  }
+
+  // Step 2: Razorpay checkout success callback
   async function verify(co, resp) {
     setPaying(false); setVerifying(true)
     try {
@@ -236,27 +293,39 @@ export default function Book() {
       </>
     )
   } else {
+    const isCashfree = checkout ? checkout.gateway === 'cashfree' : (cfg.active_payment_gateway || 'cashfree') === 'cashfree'
+    const gwName = isCashfree ? 'Cashfree' : 'Razorpay'
+
     main = (
       <>
         {cfg.payments_test_mode && (
-          <div className="demo-pay"><PIcon name="info" size={18} /><div><b>Razorpay test mode.</b> No real money moves. Pay with UPI ID <b>success@razorpay</b> (or <b>failure@razorpay</b> to see a failed payment), or a Razorpay test card.</div></div>
+          <div className="demo-pay"><PIcon name="info" size={18} /><div>
+            {isCashfree ? (
+              <><b>Cashfree test mode (Sandbox).</b> No real money moves. Pay with test UPI <b>success@cashfree</b> (or <b>failure@cashfree</b> to simulate failure), or any test card / netbanking.</>
+            ) : (
+              <><b>Razorpay test mode.</b> No real money moves. Pay with UPI ID <b>success@razorpay</b> (or <b>failure@razorpay</b> to see a failed payment), or a Razorpay test card.</>
+            )}
+          </div></div>
         )}
         <div className="card panel">
           <h2><PIcon name="lock" size={20} /> Pay {inr(quote.total)}</h2>
-          <p style={{ margin: '0 0 12px' }}>Pay securely with UPI, card, netbanking or wallet on Razorpay. Your {plural(seats, 'seat')} {checkout ? <>are held until <b>{holdTime(checkout)}</b></> : 'will be held for you while you pay'}.</p>
+          <p style={{ margin: '0 0 12px' }}>Pay securely with UPI, card, netbanking or wallet on {gwName}. Your {plural(seats, 'seat')} {checkout ? <>are held until <b>{holdTime(checkout)}</b></> : 'will be held for you while you pay'}.</p>
           <div className="pay-tabs" aria-hidden="true">
             {[['upi', 'UPI'], ['card', 'Cards'], ['bank', 'Netbanking']].map(([ic, t]) => <div key={t} className="pay-tab"><PIcon name={ic} size={22} />{t}</div>)}
           </div>
           {payNote && <div className="form-error" role="alert">{payNote}</div>}
           <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
             <button type="button" className="btn btn-lg" onClick={leavePayment} disabled={paying} aria-label="Back"><PIcon name="back" size={18} /></button>
-            <button className="btn btn-green btn-lg" style={{ flex: 1 }} type="button" onClick={pay} disabled={paying}><PIcon name="lock" size={18} /> {paying ? 'Opening Razorpay…' : payNote ? `Try again · ${inr(quote.total)}` : `Pay ${inr(quote.total)}`}</button>
+            <button className="btn btn-green btn-lg" style={{ flex: 1 }} type="button" onClick={pay} disabled={paying}><PIcon name="lock" size={18} /> {paying ? `Opening ${gwName}…` : payNote ? `Try again · ${inr(quote.total)}` : `Pay ${inr(quote.total)}`}</button>
           </div>
-          <div className="secure"><PIcon name="shield" size={14} /> Payments by Razorpay · PakkaTrip never sees your card or bank details</div>
+          <div className="secure"><PIcon name="shield" size={14} /> Payments by {gwName} · PakkaTrip never sees your card or bank details</div>
         </div>
       </>
     )
   }
+
+  const isCashfree = checkout ? checkout.gateway === 'cashfree' : (cfg.active_payment_gateway || 'cashfree') === 'cashfree'
+  const gwName = isCashfree ? 'Cashfree' : 'Razorpay'
 
   return (
     <>
@@ -268,7 +337,7 @@ export default function Book() {
       {verifying && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[rgb(11_24_45/.55)]" role="alertdialog" aria-label="Confirming payment">
           <div className="card" style={{ padding: 24, textAlign: 'center', maxWidth: 320 }}>
-            <div className="spinner" /><p style={{ margin: 0 }}><b>Confirming your seats…</b></p><p className="help">Checking your payment with Razorpay. Please don't close this page.</p></div>
+            <div className="spinner" /><p style={{ margin: 0 }}><b>Confirming your seats…</b></p><p className="help">Checking your payment with {gwName}. Please don't close this page.</p></div>
         </div>
       )}
     </>

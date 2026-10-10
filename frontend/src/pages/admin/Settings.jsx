@@ -22,7 +22,15 @@ export default function AdminSettings() {
     e.preventDefault()
     if (!e.currentTarget.checkValidity()) { e.currentTarget.reportValidity(); return }
     try {
-      await api('/admin/settings/', { method: 'PUT', body: { fee_rate: Number(s.fee_rate), fee_min: Number(s.fee_min), require_verified: s.require_verified, payout_mode: s.payout_mode, sms_otp_enabled: s.sms_otp_enabled, email_otp_enabled: s.email_otp_enabled } })
+      await api('/admin/settings/', { method: 'PUT', body: {
+        fee_rate: Number(s.fee_rate),
+        fee_min: Number(s.fee_min),
+        require_verified: s.require_verified,
+        active_payment_gateway: s.active_payment_gateway || 'cashfree',
+        payout_mode: s.payout_mode,
+        sms_otp_enabled: s.sms_otp_enabled,
+        email_otp_enabled: s.email_otp_enabled
+      } })
       setDraft(null); reload(); toast('Settings saved')
     } catch (err) { toast(err.message, true) }
   }
@@ -34,6 +42,49 @@ export default function AdminSettings() {
 
   return (
     <>
+      <div className="card max-w-[640px]">
+        <div className="card-head"><h3>Payment gateway</h3></div>
+        <form className="p-[18px]" onSubmit={save} noValidate>
+          <label className="check items-start">
+            <input
+              type="radio"
+              name="active_payment_gateway"
+              checked={(s.active_payment_gateway || 'cashfree') === 'cashfree'}
+              onChange={() => set({ active_payment_gateway: 'cashfree' })}
+            />
+            <span>
+              <b>Cashfree Payments (Recommended)</b>{' '}
+              <span className={`badge ${data.cashfree_configured ? 'b-green' : 'b-amber'}`}>
+                {data.cashfree_configured ? (data.cashfree_env === 'TEST' ? 'Sandbox / Test' : 'Production') : 'Needs API Keys'}
+              </span>
+              <br />
+              1.95% + GST standard rate, 0% platform fee offer up to ₹20 lakh GMV, best-in-class marketplace payouts.
+              Supports seamless UPI, cards, netbanking and wallets.
+            </span>
+          </label>
+          <label className="check items-start mt-3">
+            <input
+              type="radio"
+              name="active_payment_gateway"
+              checked={s.active_payment_gateway === 'razorpay'}
+              onChange={() => set({ active_payment_gateway: 'razorpay' })}
+            />
+            <span>
+              <b>Razorpay</b>{' '}
+              <span className={`badge ${data.razorpay_configured ? 'b-green' : 'b-grey'}`}>
+                {data.razorpay_configured ? 'Configured' : 'Needs API Keys'}
+              </span>
+              <br />
+              Standard Razorpay Checkout with RazorpayX / Route payout options.
+            </span>
+          </label>
+          <div className="help mt-2">
+            Switching payment gateways immediately applies to all new online traveller checkouts.
+            Past bookings keep their original gateway and payment records.
+          </div>
+          <div className="mt-4"><button className="btn btn-navy" type="submit">Save settings</button></div>
+        </form>
+      </div>
       <div className="card max-w-[640px]">
         <div className="card-head"><h3>Convenience fee</h3></div>
         <form className="p-[18px]" onSubmit={save} noValidate>

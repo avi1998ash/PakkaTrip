@@ -7,6 +7,8 @@ DEFAULT_SETTINGS = {
     "fee_rate_pct": 2.5,            # convenience fee charged to travellers on online bookings
     "fee_min_inr": 49,
     "require_verified_operator": True,
+    # Active payment gateway for online bookings: "cashfree" or "razorpay"
+    "active_payment_gateway": "razorpay",
     # How operators receive their share of online bookings:
     #   "payouts" — RazorpayX payouts the admin sends after trips complete (works on any Razorpay account)
     #   "route"   — Razorpay Route splits each payment automatically (Route must be enabled by Razorpay)
