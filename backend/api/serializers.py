@@ -189,6 +189,8 @@ class SettingsIn(serializers.Serializer):
     fee_rate = serializers.DecimalField(max_digits=4, decimal_places=1, min_value=0, max_value=20)
     fee_min = serializers.IntegerField(min_value=0, max_value=999)
     require_verified = serializers.BooleanField()
+    active_payment_gateway = serializers.ChoiceField(choices=["cashfree", "razorpay"], required=False)
+    payment_gateway = serializers.ChoiceField(choices=["cashfree", "razorpay"], required=False)
     payout_mode = serializers.ChoiceField(choices=["payouts", "route"], required=False)
     sms_otp_enabled = serializers.BooleanField(required=False)
     email_otp_enabled = serializers.BooleanField(required=False)

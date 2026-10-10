@@ -5,12 +5,12 @@ Your trip is booked and paid. Show this email or your ticket link at pickup.
 BOOKING ID: {{ b.booking_code }}
 
 Trip:        {{ b.package.title }}
-Route:       {{ b.package.from_city.name }} → {{ b.package.to_city.name }} ({{ nights }})
+Route:       {{ b.package.from_city.name }} -> {{ b.package.to_city.name }} ({{ nights }})
 Travel date: {{ date }}
 Seats:       {{ b.seats }}
 Travellers:  {{ travellers|join:", " }}
 Pickup:      {{ b.package.pickup_point|default:"The operator will share the pickup point and time before the trip." }}
-Operator:    {{ b.operator.business_name }}{% if b.operator.contact_phone %} · {{ b.operator.contact_phone }}{% endif %}
+Operator:    {{ b.operator.business_name }}{% if b.operator.contact_phone %} | {{ b.operator.contact_phone }}{% endif %}
 
 Trip fare:       {{ fare }}
 Convenience fee: {{ fee }}
@@ -20,8 +20,8 @@ Your ticket (view, cancel or review the trip):
 {{ ticket_url }}
 
 Cancellation and refunds: {{ refund_url }}
-Need help? {{ support_url }}{% if site.support_phone %} · {{ site.support_phone }}{% endif %}{% if site.support_email %} · {{ site.support_email }}{% endif %}
+Need help? {{ support_url }}{% if site.support_phone %} | {{ site.support_phone }}{% endif %}{% if site.support_email %} | {{ site.support_email }}{% endif %}
 
 Happy travels!
-— {{ site.brand }} ({{ site.domain }})
+-- {{ site.brand }} ({{ site.domain }})
 {% endautoescape %}

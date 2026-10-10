@@ -88,4 +88,5 @@ urlpatterns = [
 
     # payment gateway (server-to-server)
     path("payments/razorpay/webhook/", hooks.razorpay_webhook),
+    path("payments/cashfree/webhook/", hooks.cashfree_webhook),
 ]

@@ -313,31 +313,105 @@ def settle_online_payment(booking_id, *, order_id, payment_id):
         raise
 
 
+def settle_cashfree_payment(booking_id, *, order_id, cf_payment_id=None, signature=""):
+    """Check a Cashfree payment with the gateway and confirm the booking.
+
+    Raises GatewayError if Cashfree can't be reached, SeatError if payment is not valid,
+    and LatePaymentError (after issuing refund) if the seat hold expired and seats were taken.
+    """
+    from payments import cashfree
+    b = Booking.objects.get(pk=booking_id)
+    pay = Payment.objects.filter(booking=b, gateway_order_id=order_id).first()
+    if not pay:
+        raise SeatError("Payment record not found for this booking.")
+    if pay.status == Payment.Status.CAPTURED and b.status in (Booking.Status.CONFIRMED, Booking.Status.COMPLETED):
+        return b
+
+    cf_order = cashfree.fetch_order(order_id)
+    payments = cashfree.fetch_order_payments(order_id)
+
+    successful_payment = None
+    if cf_payment_id:
+        for p in payments:
+            if str(p.get("cf_payment_id")) == str(cf_payment_id) and p.get("payment_status") == "SUCCESS":
+                successful_payment = p
+                break
+    if not successful_payment:
+        for p in payments:
+            if p.get("payment_status") == "SUCCESS":
+                successful_payment = p
+                break
+
+    if not successful_payment:
+        if cf_order.get("order_status") != "PAID":
+            raise SeatError("The payment didn't go through. No money was taken — please try again.")
+        paid_amt = Decimal(str(cf_order.get("order_amount", 0)))
+        method, detail = "online", "Cashfree"
+        payment_id_str = str(cf_order.get("cf_order_id", order_id))
+    else:
+        paid_amt = Decimal(str(successful_payment.get("payment_amount", 0)))
+        method, detail = cashfree.method_label(successful_payment)
+        payment_id_str = str(successful_payment.get("cf_payment_id"))
+
+    if paid_amt != b.total_amount:
+        raise SeatError("This payment doesn't match the booking amount.")
+
+    try:
+        confirmed_b = confirm_online_payment(b.pk, order_id=order_id, payment_id=payment_id_str, method=method, detail=detail)
+        if signature:
+            Payment.objects.filter(booking=b, gateway_order_id=order_id).update(gateway_signature=str(signature)[:255])
+        return confirmed_b
+    except LatePaymentError:
+        refund_late_payment(b.pk, order_id=order_id, payment_id=payment_id_str, method=method, detail=detail)
+        raise
+
+
 def process_refund(refund_id):
-    """Send a pending refund to Razorpay. Demo-gateway refunds stay as records only.
+    """Send a pending refund to the payment gateway (Cashfree or Razorpay).
 
     Failures leave the refund pending with a reason; `manage.py payment_jobs` retries them.
     """
-    from payments import razorpay
+    from payments import razorpay, cashfree
     r = Refund.objects.select_related("payment", "booking").get(pk=refund_id)
-    if r.status != Refund.Status.PENDING or r.payment.gateway != "razorpay":
+    if r.status != Refund.Status.PENDING:
         return r
     if r.amount <= 0:
         r.status, r.processed_at = Refund.Status.PROCESSED, timezone.now()
         r.save(update_fields=["status", "processed_at"])
         return r
-    from payments.payouts import reverse_for_refund
-    reverse_for_refund(r)   # Route: take the refunded part back from the operator's transfer first
-    try:
-        res = razorpay.refund_payment(r.payment.gateway_payment_id, r.amount, notes={"booking": r.booking.booking_code})
-    except razorpay.GatewayError as e:
-        r.failure_reason = str(e)[:200]
-        r.save(update_fields=["failure_reason"])
+
+    if r.payment.gateway == "cashfree":
+        refund_id_str = f"rf_{r.booking.booking_code}_{r.pk}"
+        try:
+            res = cashfree.create_refund(r.payment.gateway_order_id, r.amount, refund_id=refund_id_str,
+                                         note=f"Refund for {r.booking.booking_code}")
+        except cashfree.GatewayError as e:
+            r.failure_reason = str(e)[:200]
+            r.save(update_fields=["failure_reason"])
+            return r
+        r.gateway_refund_id = str(res.get("cf_refund_id") or res.get("refund_id") or refund_id_str)
+        r.failure_reason = ""
+        ref_status = res.get("refund_status")
+        r.status = Refund.Status.PROCESSED if ref_status == "SUCCESS" else Refund.Status.PROCESSING
+        r.processed_at = timezone.now() if r.status == Refund.Status.PROCESSED else None
+        r.save(update_fields=["gateway_refund_id", "failure_reason", "status", "processed_at"])
         return r
-    r.gateway_refund_id, r.failure_reason = res["id"], ""
-    r.status = Refund.Status.PROCESSED if res.get("status") == "processed" else Refund.Status.PROCESSING
-    r.processed_at = timezone.now() if r.status == Refund.Status.PROCESSED else None
-    r.save(update_fields=["gateway_refund_id", "failure_reason", "status", "processed_at"])
+
+    if r.payment.gateway == "razorpay":
+        from payments.payouts import reverse_for_refund
+        reverse_for_refund(r)   # Route: take the refunded part back from the operator's transfer first
+        try:
+            res = razorpay.refund_payment(r.payment.gateway_payment_id, r.amount, notes={"booking": r.booking.booking_code})
+        except razorpay.GatewayError as e:
+            r.failure_reason = str(e)[:200]
+            r.save(update_fields=["failure_reason"])
+            return r
+        r.gateway_refund_id, r.failure_reason = res["id"], ""
+        r.status = Refund.Status.PROCESSED if res.get("status") == "processed" else Refund.Status.PROCESSING
+        r.processed_at = timezone.now() if r.status == Refund.Status.PROCESSED else None
+        r.save(update_fields=["gateway_refund_id", "failure_reason", "status", "processed_at"])
+        return r
+
     return r
 
 

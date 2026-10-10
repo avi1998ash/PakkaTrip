@@ -9,6 +9,8 @@ checkout callback reaches us; every handler is idempotent because Razorpay retri
 import json
 import logging
 
+from django.conf import settings
+from django.db import models
 from django.http import HttpResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -63,5 +65,76 @@ def razorpay_webhook(request):
     elif kind == "transfer.failed":
         e = payload.get("transfer", {}).get("entity", {})
         Transfer.objects.filter(gateway_transfer_id=e.get("id")).update(status=Transfer.Status.FAILED)   # falls back to payouts
+
+    return HttpResponse("ok")
+
+
+@csrf_exempt
+@require_POST
+def cashfree_webhook(request):
+    """Cashfree -> PakkaTrip server-to-server webhook events - /api/payments/cashfree/webhook/
+
+    Events: PAYMENT_SUCCESS_WEBHOOK, PAYMENT_FAILED_WEBHOOK, PAYMENT_USER_DROPPED_WEBHOOK, REFUND_STATUS_WEBHOOK
+    """
+    from bookings.services import settle_cashfree_payment
+    from payments import cashfree
+
+    timestamp = request.headers.get("x-webhook-timestamp")
+    signature = request.headers.get("x-webhook-signature")
+
+    # In production or whenever signature header is sent, verify signature
+    if signature or not settings.DEBUG:
+        if not cashfree.verify_webhook_signature(timestamp, request.body, signature):
+            return HttpResponse("bad signature", status=400)
+
+    try:
+        event = json.loads(request.body)
+    except ValueError:
+        return HttpResponse("bad json", status=400)
+
+    event_type = event.get("type", "") or event.get("event", "")
+    data = event.get("data", {})
+
+    if event_type in ("PAYMENT_SUCCESS_WEBHOOK", "payment.captured", "payment.success"):
+        payment_data = data.get("payment", {})
+        order_data = data.get("order", {})
+        order_id = order_data.get("order_id") or payment_data.get("order_id")
+        cf_payment_id = payment_data.get("cf_payment_id")
+
+        if order_id:
+            pay = Payment.objects.filter(gateway="cashfree", gateway_order_id=order_id).first()
+            if pay:
+                try:
+                    settle_cashfree_payment(pay.booking_id, order_id=order_id, cf_payment_id=cf_payment_id, signature=signature or "")
+                except (SeatError, cashfree.GatewayError) as e:
+                    log.warning("Cashfree webhook for %s not settled: %s", order_id, e)
+                    if isinstance(e, cashfree.GatewayError):
+                        return HttpResponse("retry", status=503)
+
+    elif event_type in ("PAYMENT_FAILED_WEBHOOK", "PAYMENT_USER_DROPPED_WEBHOOK", "payment.failed"):
+        payment_data = data.get("payment", {})
+        order_data = data.get("order", {})
+        order_id = order_data.get("order_id") or payment_data.get("order_id")
+        if order_id:
+            Payment.objects.filter(gateway="cashfree", gateway_order_id=order_id, status=Payment.Status.CREATED).update(
+                status=Payment.Status.FAILED
+            )
+
+    elif event_type in ("REFUND_STATUS_WEBHOOK", "refund.processed", "refund.failed"):
+        refund_data = data.get("refund", {})
+        cf_refund_id = str(refund_data.get("cf_refund_id") or "")
+        refund_id = str(refund_data.get("refund_id") or "")
+        ref_status = (refund_data.get("refund_status") or "").upper()
+
+        refund = Refund.objects.filter(
+            models.Q(gateway_refund_id=cf_refund_id) | models.Q(gateway_refund_id=refund_id)
+        ).first() if (cf_refund_id or refund_id) else None
+
+        if refund and refund.status not in (Refund.Status.PROCESSED, Refund.Status.FAILED):
+            if ref_status in ("SUCCESS", "PROCESSED"):
+                refund.status, refund.processed_at = Refund.Status.PROCESSED, timezone.now()
+            elif ref_status in ("FAILED", "CANCELLED"):
+                refund.status = Refund.Status.FAILED
+            refund.save(update_fields=["status", "processed_at"])
 
     return HttpResponse("ok")
